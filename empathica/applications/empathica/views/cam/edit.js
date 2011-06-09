@@ -9,13 +9,15 @@ $("#header,#suggestions").hover(function() {
 });
 */
 
-$.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/edit.png')}}";
+$.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/edit_modified.png')}}";
 $("#btnSelect").toolbarButton({ icon: 0, group: "inputMode" });
 $("#btnAddConcepts").toolbarButton({ icon: 1, group: "inputMode" });
 $("#btnAddConnections").toolbarButton({ icon: 2, group: "inputMode" });
-$("#btnAddComments").toolbarButton({ icon: 3, group: "inputMode" });
-$("#btnZoomFit").toolbarButton({ icon: 4 });
-$("#btnSettings").toolbarButton({ icon: 5 });
+$("#btnSave").toolbarButton({ icon: 3, group: "inputMode" });
+$("#btnExport").toolbarButton({ icon: 4, group: "inputMode" });
+$("#btnAddComments").toolbarButton({ icon: 5, group: "inputMode" });
+$("#btnZoomFit").toolbarButton({ icon: 6 });
+$("#btnSettings").toolbarButton({ icon: 7 });
 $.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/nav.png')}}";
 //$("#btnCounsellor").toolbarButton({ icon: 5, label: "Counsellor", labelRight: true });
 $("#btnDone").toolbarButton({ icon: 6, label: "Done" });
@@ -155,6 +157,18 @@ $("#btnAddConnections").click(function() {
         .stop(true,true).slideUp(300);
     g.setState(g.stateAddingEdges);
 });
+$("#btnSave").click(function() {
+    $('#btnSelect').toolbarButton('toggle');
+    g.saveGraph();
+    $.blockUI({
+        message: "Saving. Just a moment... ",
+    });
+});
+$("#btnExport").click(function() {
+    $('#btnSelect').toolbarButton('toggle');
+    g.saveGraph();
+    setTimeout("window.location.href = '{{=URL('cam','download',args=[cam['id']])}}'", 500);
+});
 $("#btnAddComments").click(function() {
     $("#canvasDiv")
         .css('cursor', 'crosshair');
@@ -178,6 +192,7 @@ $("#btnCounsellor").click(function() {
 $("#btnDone").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph("{{=URL('conflict','overview', args=[conflictid])}}");
+    
     $.blockUI({
         message: "Saving. Just a moment... ",
     });
