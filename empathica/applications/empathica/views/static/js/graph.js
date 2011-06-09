@@ -412,6 +412,8 @@ Graph.prototype.addEdge = function( id1, id2, v, inPts) {
     
     this.db_addEdge(e);
     this.pushToUndo(new Command(this.cmdEdge, e.id, this.cmdAddDB, "", e.id));
+    
+    return e;
 }
 
 /*

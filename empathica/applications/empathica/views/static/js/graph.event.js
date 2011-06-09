@@ -635,16 +635,24 @@ Graph.prototype.eventMouseDown = function(e) {
                     edgeExists = true;
                 }
             }
+            
+            var edge;
             if (!edgeExists) {
                 // add edge
-                g.addEdge(g.addingEdgeFromNode.id, node.id, g.defaultValence, g.pointArray);
+                edge = g.addEdge(g.addingEdgeFromNode.id, node.id, g.defaultValence, g.pointArray);
             }
             // reset midpoint array
             g.pointArray = [];
             // reset state
             g.addingEdgeFromNode = new Object();
-            g.interactionMode = g.addingEdgeAddedZero;
-            //$("#btnSelect").toolbarButton('toggle');
+            
+            //g.interactionMode = g.addingEdgeAddedZero;
+        
+            $("#btnSelect").toolbarButton('toggle');
+            
+            g.select(edge, true);   
+            g.showValenceSelector(g.selectedObject);
+   
             g.repaint();
         }
         
