@@ -95,9 +95,9 @@ Graph.prototype.eventKeyDown = function(e) {
     }
     
     if (g.interactionMode != g.renamingNode) {
-        if ( KEY.BACKSPACE == code ) {
-            return false;
-        }
+        //if ( KEY.BACKSPACE == code ) {
+        //    return false;
+        //}
         if ( KEY.ADD_NODES == code ) {         
             $('#btnAddConcepts').toolbarButton('toggle');
             return;
@@ -108,7 +108,7 @@ Graph.prototype.eventKeyDown = function(e) {
     }
     
     if (g.selectedObject instanceof Node) {
-        if (KEY.DELETE == code && g.interactionMode != g.renamingNode) {
+        if ((KEY.BACKSPACE == code || KEY.DELETE == code) && g.interactionMode != g.renamingNode) {
             g.deleteNode(g.selectedObject.id);
             g.interactionMode = g.draggingGraph;
             g.hideValenceSelector();
@@ -121,7 +121,7 @@ Graph.prototype.eventKeyDown = function(e) {
             g.showTextEditor(g.selectedObject);
         } 
     } else if (g.selectedObject instanceof Edge) {
-        if (KEY.DELETE == code) {
+        if (KEY.BACKSPACE == code || KEY.DELETE == code) {
             g.deleteEdge(g.selectedObject.id);
             g.interactionMode = g.draggingGraph;
             g.hideValenceSelector();
@@ -130,7 +130,7 @@ Graph.prototype.eventKeyDown = function(e) {
             g.selectedObject = {};
         }
     } else if (g.interactionMode == g.multiSelect) {
-        if (KEY.DELETE == code) {
+        if (KEY.BACKSPACE == code || KEY.DELETE == code) {
             // Delete all
             g.deleteSelection();
         }
