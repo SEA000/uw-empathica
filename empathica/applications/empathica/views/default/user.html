@@ -1,6 +1,12 @@
 {{ extend 'layout.html' }}
 
 {{ block css }}
+<style type="text/css">
+table, th, td
+{
+    padding-top:10px;
+}
+</style>
 {{ end #css }}
 
 {{ block onReady }}
@@ -23,11 +29,17 @@
 {{ block content }}
     <h1>{{=title}}</h1>
     <h3></h3>
-    <!--<h3>{{=subtitle}}</h3>-->
-    <center>{{=form}}</center>
-    {{ if page == "login": }}
-        
-    {{ elif page == "profile": }}
-    
-    {{ pass }}
+    <div align="center">
+        {{=form}}
+        <div style="margin-left:-150px; padding-top:20px">
+            {{ if page == "login": }}
+                <table>
+                    <tr>
+                        <td><a href='{{=URL('default', 'user', args=['register'])}}'>Do not have an account?</a></td>
+                    </tr>
+                </table>
+            {{ elif page == "profile": }}
+            {{ pass }}
+        </div>
+    </div>
 {{ end #content }}
