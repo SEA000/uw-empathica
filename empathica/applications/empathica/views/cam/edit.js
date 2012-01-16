@@ -1,13 +1,5 @@
 /* Toolbar
 *******************************************************************************/
-/*
-$("#header,#suggestions").delay(3000).animate({'opacity': '0.8'}, 3000);
-$("#header,#suggestions").hover(function() {
-    $("#header,#suggestions").stop().animate({'opacity': '1.0'}, 300);
-}, function() {
-    $("#header,#suggestions").stop().animate({'opacity': '0.8'}, 3000);
-});
-*/
 
 $.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/edit_modified.png')}}";
 $("#btnSelect").toolbarButton({ icon: 0, group: "inputMode" });
@@ -19,7 +11,6 @@ $("#btnAddComments").toolbarButton({ icon: 5, group: "inputMode" });
 $("#btnZoomFit").toolbarButton({ icon: 6 });
 $("#btnSettings").toolbarButton({ icon: 7 });
 $.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/nav.png')}}";
-//$("#btnCounsellor").toolbarButton({ icon: 5, label: "Counsellor", labelRight: true });
 $("#btnDone").toolbarButton({ icon: 6, label: "Done" });
 
 /* Suggestions
@@ -183,12 +174,7 @@ $("#btnZoomFit").click(function() {
 $("#btnSettings").click(function() {
     $("#winSettings").modal();
 });
-/*
-$("#btnCounsellor").click(function() {
-    g.saveGraph("{{=URL('cam','counsellor',args=[cam.id])}}");
-    //location.href = "{{=URL('cam','counsellor',args=[cam.id])}}";
-});
-*/
+
 $("#btnDone").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph("{{=URL('conflict','overview', args=[conflictid])}}");
