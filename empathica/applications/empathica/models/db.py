@@ -139,36 +139,7 @@ db.define_table('Invite',
 db.Invite.invitee_email.requires = [
     IS_NOT_EMPTY(error_message=T("MSG TBD"))
 ]
+
 db.Invite.id_group.requires = [
         IS_IN_DB(db, db.GroupPerspective.id)
 ]
-
-db.define_table('ChatSession',
-        Field('id_map',db.Map),
-        Field('expected_archetype', 'string'),
-        Field('rate_variable', db.Node),
-        Field('connect_one', db.Node),
-        Field('connect_two', db.Node))
-
-db.define_table('ChatVariables',
-        Field('id_map',db.Map),
-        Field('variable','string'),
-        Field('value','string'))
-
-db.define_table('GrammarLogs',
-        Field('raw_text','string'),
-        Field('pos_tags','string'))
-
-db.define_table('ChatGrammars',
-        Field('grammar_name', 'string'),
-        Field('pos_list', 'string'),
-        Field('variable_name', 'string'))
-
-db.define_table('ChatResponses',
-        Field('expectation', 'integer'),
-        Field('response', 'string'))
-
-db.define_table('ChatQuestions',
-        Field('question','string'),
-        Field('reply','string'),
-        Field('query','string'))

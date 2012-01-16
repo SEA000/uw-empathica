@@ -158,7 +158,6 @@ $("#btnSave").click(function() {
 $("#btnExport").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph();
-    //setTimeout("window.location.href = '{{=URL('cam','download',args=[cam['id']])}}'", 500);
     setTimeout("window.open('{{=URL('cam','download',args=[cam['id']])}}', '_blank')", 500);
 });
 $("#btnAddComments").click(function() {
