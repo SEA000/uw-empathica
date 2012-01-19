@@ -5,38 +5,21 @@
 var g = new Object();
 
 function Graph() {
-    // CAM Graph
-
     // Name of canvas html element
     this.canvasName = "cam";
-    // HTML5 canvas elements
-    var canvas = document.getElementById(this.canvasName);
-    var ctx = canvas.getContext("2d");
     
-    this.canvas = canvas;
-    this.ctx = ctx;
-
-    // For auto-assigning IDs to nodes in the graph
-    this.nextId = 0; // To be deprecated once integrated with DB
+    // HTML5 canvas elements
+    this.canvas = document.getElementById(this.canvasName);
+    this.ctx = this.canvas.getContext("2d");
     
     // Disable channels for dev without GAE
-    this.channelEnabled = false;
     this.mapID = {{=cam.id}};
     
-    // Database stuff
-    this.db_methodPath = '/empathica/cam/call/json/';
-    // Methods
-
     // Min and max values for node and edge valence values
     this.minValence = -1;
     this.neutralValence = 0;
     this.maxValence = 1;
     this.defaultValence = 0;
-
-    // Shapes
-    this.RECT = "rectangle";
-    this.OVAL = "oval";
-    this.HEX = "hexagon";
 
     /*
         Illustration of hexOffset. It determines the proportion of the 
@@ -59,15 +42,6 @@ function Graph() {
     // Colour scheme for the graph
     this.theme = THEMES.DEFAULT;
     
-    // Node colours
-    this.greenLine = "rgba(0,255,0,255)";
-    this.greenFill = "rgba(215,255,215,255)";
-    this.redLine = "rgba(255,0,0,255)";
-    this.redFill = "rgba(255,215,215,255)";
-    this.yellowLine = "rgba(255,255,0,255)";
-    this.yellowFill = "rgba(255,255,215,255)";
-    this.fontColour = "rgba(0,0,0,255)";
-    
     // For highlighting nodes
     this.lowColour = 200;
     this.highColour = 245;
@@ -83,17 +57,11 @@ function Graph() {
     this.edgeLineCap = "square";
     this.dashedPattern = new Array(2,10); // Used to determine line/blank interval. See canvasExtension.js
     this.edgePadding = 12;   // pixels on either side of an edge to be used for edge picking
-    this.edgeShadowBlur = 5;
-    this.edgePositiveShadowColour = "rgba(0, 240, 0, 255)";
-    this.edgeNegativeShadowColour = "rgba(240, 0, 0, 255)";
     this.newEdgeColour = "rgba(128,128,128,255)";
     this.newEdgeWidth = 1.5;
     
     // Complex edges
     this.pointArray = new Array();
-
-    // Canvas default
-    this.blankGraph = "rgba(0,0,0,0)";
 
     // Selection handles
     this.handleTL = "handleTL";
@@ -113,13 +81,6 @@ function Graph() {
     this.textWidthInNode = 0.6;  // How much of the width of a node can be occupied by text (on auto-resize)
     this.textHeightInNode = 0.8; // How much of the height of a node can be occupied by text (on auto-resize)
     this.nodeWidthIncrease = 1.8; // Interval by which a node gets wider on auto-resize
-
-    // Comments
-    this.commentFill = "rgba(200,200,200,255)";
-    this.commentOutline = "rgba(128,128,128,255)";
-    this.commentEdgeStyle = "rgba(128,128,128,255)";
-    this.commentEdgeWidth = 1.0;
-    this.commentEdgePattern = new Array(2, 2);
     
     // Mouse event flags
     this.mouseDown = false;
@@ -128,13 +89,6 @@ function Graph() {
     this.resizingDirection = "";
     this.resizedOrMoved = false;
     this.oldDim = {};
-    this.totalX = 0;
-    this.totalY = 0;
-    this.mouseOverObject = {};
-    this.brightTimer = -1;          // Timer used to highlight node on mouseover
-    this.darkTimer = -1;            // Timer used to return highlighted node to normal state
-    this.timerSpeed = 40;
-    this.lightChange = 5;
     
     // Graph selection handling
     this.selectedObject = new Object();
@@ -174,7 +128,6 @@ function Graph() {
     // UI Input mode state machine - defines Graph behaviour based on UI settings
     this.stateAddingNodes = "stateAddingNodes";
     this.stateAddingEdges = "stateAddingEdges";
-    this.stateAddingComments = "stateAddingEdges";
     this.stateDefault = "stateDefault";
     
     this.inputModeState = this.stateDefault;        // current graph state
@@ -188,10 +141,12 @@ function Graph() {
     this.undoStack = new Array();
     this.redoStack = new Array();
     this.undoStackSize = 30;
+    
     // Types
     this.cmdEdge = "cmdEdge";
     this.cmdNode = "cmdNode";
     this.cmdMulti = "cmdMulti";
+    
     // Modified "properties"
     this.cmdNodePlaceholder = "cmdNodePlaceholder"; // earliest occurrence of node in undo stack
     this.cmdAddDB = "cmdAddDB";
@@ -214,6 +169,8 @@ function Graph() {
     this.zoomScale = 1;
     this.originX = 0;
     this.originY = 0;
+    this.maxZoomIn = 0.1;
+    this.maxZoomOut = 3;
     
     // Error codes
     this.NODEID_INVALID         = 0x80080000;
@@ -247,14 +204,14 @@ function Graph() {
     Available states: 
     this.stateAddingNodes
     this.stateAddingEdges
-    this.stateAddingComments
     this.stateDefault
     
     this.inputModeState = this.stateDefault;        // current graph state
  */
 Graph.prototype.setStateFromUI = function(newState) {
-    if (this.stateAddingNodes != newState && this.stateAddingEdges != newState 
-        && this.stateAddingComments != newState && this.stateDefault != newState) {
+    if (this.stateAddingNodes != newState &&
+        this.stateAddingEdges != newState &&
+        this.stateDefault != newState) {
         debugOut('Attempting to set unknown state: ' + newState);
         return false;
     }
@@ -310,9 +267,9 @@ Graph.prototype.positionSlider = function(node) {
     if (!(node instanceof Node)) {
         return false;
     } 
-    $('#valenceDiv').css('left', node.dim.x - 50);
-    $('#valenceDiv').css('top', node.dim.y + node.dim.height/2 + 10);
     
+    $('#valenceDiv').css('left', this.scaleX(node.dim.x) - 50);
+    $('#valenceDiv').css('top', this.scaleY(node.dim.y + node.dim.height/2) + 10);
 }
 
 // Concept nodes
@@ -349,7 +306,6 @@ Graph.prototype.addNode = function( nodeText, nodeValence, x, y ) {
     
     // Make call to DB to get the real new ID later
     n.id = guid();
-    
     n.dim = {};
     
     this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdNodePlaceholder, "", n.id));
@@ -359,11 +315,7 @@ Graph.prototype.addNode = function( nodeText, nodeValence, x, y ) {
     this.nodes[n.id] = n;
     this.drawOrder.push(n.id);
     
-    // HTML5 canvas elements
-    var canvas = this.canvas;
-    var ctx = this.ctx;
-    this.setSizeByText(ctx, n, true);
-    
+    this.setSizeByText(this.ctx, n, true);
     this.repaint();
     
     return n;
@@ -386,7 +338,7 @@ function Point(x,y) {
 // Edge added through UI
 Graph.prototype.addEdge = function( id1, id2, v, inPts) {
     // Verify that the nodes exist
-    if (typeof(this.nodes[id1]) == "undefined" || typeof(this.nodes[id2]) == "undefined") {
+    if (typeof(this.nodes[id1]) == "undefined" || typeof(this.nodes[id2]) == "undefined" || id1 == id2) {
         return this.NODEID_INVALID;
     } else if (v < this.minValence || v > this.maxValence) {
         return this.VALENCE_OUT_OF_RANGE;
@@ -565,8 +517,8 @@ Graph.prototype.deleteSelection = function () {
 Graph.prototype.setPosition = function(n, x, y) {
     var oldDim = n.dim;
     if (x && y) {
-        n.dim.x = x;
-        n.dim.y = y;
+        n.dim.x = g.unscaleX(x);
+        n.dim.y = g.unscaleY(y);
     } else {    
         var canvas = document.getElementById(this.canvasName);
         n.dim.x = n.dim.width/2 + Math.random() * (canvas.width - 10 - n.dim.width);
@@ -581,6 +533,7 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
     if (!(node instanceof Node)) {
         return;
     }
+    
     if (node.text == null) {
         return;
     }
@@ -591,11 +544,12 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
     node.dim.width = 100;
     node.dim.height = 60;
     
+    var scaledBaseTextWidth = this.textWidthInNode * this.zoomScale; 
+    var scaledBaseTextHeight = this.textHeightInNode * this.zoomScale; 
+    
     var textWidth = ctx.measureText(node.text).width;
-    
-    var nodeWidth = node.dim.width * this.textWidthInNode; 
-    
-    var fits = false;
+    var nodeWidth = node.dim.width * scaledBaseTextWidth; 
+        
     // if text already fits in node, return
     if (textWidth <= nodeWidth) {
         return;
@@ -608,19 +562,20 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
     var increaseWidth = true;
     var maxHeight = 0;
     var count = 0;
+    
+    var fits = false;
     while (!fits && count < 10) {
         count++;
         lineArray = this.getTextLines(ctx, node);
         
         var textWidth = this.lengthOfLongestLine(ctx, lineArray);
-        //debugOut("textWidth = " + textWidth);
         
         // getTextLines fits text to width, so now check height
         // the total height (in pixels) of the node that is allowed to be occupied by text
-        maxHeight = node.dim.height * this.textHeightInNode;
+        maxHeight = node.dim.height * scaledBaseTextHeight;
         
         // Break if line fits height AND width wise
-        if (maxHeight >= lineArray.length * parseInt(this.theme.nodeFontLineHeight) && textWidth < node.dim.width * this.textWidthInNode) {
+        if (maxHeight >= lineArray.length * parseInt(this.theme.nodeFontLineHeight) && textWidth < node.dim.width * scaledBaseTextWidth) {
             break;
         }
         
@@ -719,9 +674,6 @@ Graph.prototype.getNodeUnderPointer = function(mx, my) {
     // Traverse the nodes in reverse draw order, so we get the top-most node first
     for (var i = this.drawOrder.length-1; i >= 0; i--) {
         var node = this.nodes[this.drawOrder[i]]; 
-        // var coords = g.getCursorPosition(e);
-        // var mx = coords[0];
-        // var my = coords[1];
         if (this.clickInsideNode(mx, my, node)) {
             return node;
         }
@@ -733,91 +685,73 @@ Graph.prototype.getNodeUnderPointer = function(mx, my) {
 Graph.prototype.getEdgeUnderPointer = function(mx, my) {
     var canvas = document.getElementById(this.canvasName);
     var ctx = canvas.getContext("2d");
-    
+       
     for (var i in this.edges) {
         var edge = this.edges[i];
-        
         var to = this.nodes[edge.to];
         var from = this.nodes[edge.from];
-        
-        // Create bounding box
-        // ang should be the direction from 'from' to 'to'
-        
         var pts = edge.innerPoints;
+        var padding = this.edgePadding * Math.min(1, this.zoomScale);
+        
         // Add beginning and end to point array
         pts.unshift(new Point(from.dim.x, from.dim.y));
         pts.push(new Point(to.dim.x, to.dim.y));
         
         ctx.beginPath();
         
-        // Move to first point
-        var ang = Math.atan2(to.dim.y - from.dim.y, 
-                             to.dim.x - from.dim.x);
+        // Create bounding box
+        // ang should be the direction from 'from' to 'to'        
+        var ang = Math.atan2(this.scaleY(to.dim.y) - this.scaleY(from.dim.y), 
+                             this.scaleX(to.dim.x) - this.scaleX(from.dim.x));
         var perp = Math.PI/2 + ang;
         if (perp > Math.PI * 2) {
             perp -= Math.PI*2;
         }
-        ctx.moveTo( from.dim.x + this.edgePadding * Math.cos(perp), 
-                    from.dim.y + this.edgePadding * Math.sin(perp));
+        
+        // Move to first point
+        ctx.moveTo( this.scaleX(from.dim.x) + padding * Math.cos(perp), 
+                    this.scaleY(from.dim.y) + padding * Math.sin(perp));
         
         for (var count = 0; count < 2; count++) {
             for (var i = 0; i < pts.length-1; i++) {
                 
                 var f = pts[i];
                 var t = pts[i+1];
-                ang = Math.atan2(t.y - f.y, 
-                                     t.x - f.x);
+                ang = Math.atan2(this.scaleY(t.y) - this.scaleY(f.y), this.scaleX(t.x) - this.scaleX(f.x));
                 perp = Math.PI/2 + ang;
                 if (perp > Math.PI * 2) {
                     perp -= Math.PI*2;
                 }
                 
-                ctx.lineTo( f.x + this.edgePadding * Math.cos(perp), 
-                            f.y + this.edgePadding * Math.sin(perp));
+                ctx.lineTo( this.scaleX(f.x) + padding * Math.cos(perp), 
+                            this.scaleY(f.y) + padding * Math.sin(perp));
+                            
                 // Draw line on first side
-                ctx.lineTo( t.x + this.edgePadding * Math.cos(perp), 
-                            t.y + this.edgePadding * Math.sin(perp));
+                ctx.lineTo( this.scaleX(t.x) + padding * Math.cos(perp), 
+                            this.scaleY(t.y) + padding * Math.sin(perp));
             }
+            
             // Draw connecting edge on end side
             if (count == 0) {
-                ctx.lineTo( t.x - this.edgePadding * Math.cos(-1*perp), 
-                            t.y + this.edgePadding * Math.sin(-1*perp));
+                ctx.lineTo( this.scaleX(t.x) - padding * Math.cos(-1*perp), 
+                            this.scaleY(t.y) + padding * Math.sin(-1*perp));
             }
             pts.reverse();
         }
         
-        ctx.lineTo( from.dim.x - this.edgePadding * Math.cos(-1*perp),
-                    from.dim.y + this.edgePadding * Math.sin(-1*perp));
-        
-        /*
-        ctx.moveTo( from.dim.x + this.edgePadding * Math.cos(perp), 
-                    from.dim.y + this.edgePadding * Math.sin(perp));
-        // long edge 1
-        ctx.lineTo( to.x + this.edgePadding * Math.cos(perp), 
-                    to.y + this.edgePadding * Math.sin(perp));
-        
-        ctx.lineTo( to.x - this.edgePadding * Math.cos(-1*perp), 
-                    to.y + this.edgePadding * Math.sin(-1*perp));
-        ctx.lineTo( from.x - this.edgePadding * Math.cos(-1*perp),
-                    from.y + this.edgePadding * Math.sin(-1*perp));
-        */
+        ctx.lineTo( this.scaleX(from.dim.x) - padding * Math.cos(-1*perp),
+                    this.scaleY(from.dim.y) + padding * Math.sin(-1*perp));
         
         ctx.closePath();
-        
-        //ctx.strokeStyle = "red";
-        //ctx.stroke();
         
         // get rid of those points
         pts.shift();
         pts.pop();
         
-        //if (ctx.isPointInPath(e.pageX, e.pageY)) {
         if (ctx.isPointInPath(mx, my)) {
             return edge;
         }
-
     }
-    
     return this.notAnEdge;
 }
 
@@ -854,67 +788,29 @@ Graph.prototype.isClickOnHandle = function(pixColour) {
     } else { 
         return false;
     }
-    /*if (pixColour == this.handleTL || pixColour == this.handleTR || 
-        pixColour == this.handleBL || pixColour == this.handleBR) {
-        return true;
-    } else {
-        return false;
-    }*/
 }
 
 Graph.prototype.whichHandle = function(node, mx, my) {
-    if (mx < node.dim.x && my < node.dim.y) {
+    if (mx < this.scaleX(node.dim.x) && my < this.scaleY(node.dim.y)) {
         return this.handleTL;
-    } else if (mx < node.dim.x && my > node.dim.y) {
+    } else if (mx < this.scaleX(node.dim.x) && my > this.scaleY(node.dim.y)) {
         return this.handleBL;
-    } else if (mx > node.dim.x && my < node.dim.y) {
+    } else if (mx > this.scaleX(node.dim.x) && my < this.scaleY(node.dim.y)) {
         return this.handleTR;
-    } else if (mx > node.dim.x && my > node.dim.y) {
+    } else if (mx > this.scaleX(node.dim.x) && my > this.scaleY(node.dim.y)) {
         return this.handleBR;
     }
 }
 
-// TODO
-Graph.prototype.nodeFadeIn = function(node) {
-    // HTML5 canvas elements
-    var canvas = document.getElementById(this.canvasName);
-    var ctx = canvas.getContext("2d");
-    
-    //var shade = 
-}
-
-Graph.prototype.zoomIn = function() {
-    // HTML5 canvas elements
-    var canvas = document.getElementById(this.canvasName);
-    var ctx = canvas.getContext("2d");
-    
-    var zoom = 1.5;
-    
-    
-}
-
-Graph.prototype.zoomOut = function() {
-    // HTML5 canvas elements
-    var canvas = document.getElementById(this.canvasName);
-    var ctx = canvas.getContext("2d");
-    
-    ctx.save();
-    ctx.scale(0.5,0.5);
-    ctx.restore();
-    this.repaint();
-    debugOut("zoomed out");
-}
-
 Graph.prototype.showTextEditor = function(node) {
     $('#textEditDiv').css('position', 'absolute');
-    $('#textEditDiv').css('top', node.dim.y - node.dim.height/2);
+    $('#textEditDiv').css('top', this.scaleY(node.dim.y) - node.dim.height/2);
     $('#textEditDiv').fadeIn(100, function() {
         $('#textEditInput').focus();
     });
     $('#textEditInput').val(node.text);
     var width = parseInt($('#textEditInput').css('width'), 10);
-    $('#textEditDiv').css('left', node.dim.x - width/2);
-    //setTimeout(function(){ $('#textEditInput').focus(); }, 1); // HACK!
+    $('#textEditDiv').css('left', this.scaleX(node.dim.x) - width/2);
 }
 
 Graph.prototype.hideTextEditor = function() {
@@ -925,8 +821,8 @@ Graph.prototype.hideTextEditor = function() {
 Graph.prototype.showValenceSelector = function(node, mx, my) {
     $('#valenceDiv').css('position', 'absolute');
     if (node instanceof Node) {
-        $('#valenceDiv').css('left', node.dim.x - 50);
-        $('#valenceDiv').css('top', node.dim.y + node.dim.height/2 + 10);
+        $('#valenceDiv').css('left', this.scaleX(node.dim.x) - 50);
+        $('#valenceDiv').css('top', this.scaleY(node.dim.y + node.dim.height/2) + 10);
     } else if (node instanceof Edge) {
         var edge = node;
         // Determine midpoint of nodes
@@ -936,17 +832,14 @@ Graph.prototype.showValenceSelector = function(node, mx, my) {
             $('#valenceDiv').css('left', mx - 50);
             $('#valenceDiv').css('top', my + 15);
         } else {
-            var midx = (from.dim.x + to.dim.x)/2;
-            var midy = (from.dim.y + to.dim.y)/2;
+            var midx = this.scaleX((from.dim.x + to.dim.x)/2);
+            var midy = this.scaleY((from.dim.y + to.dim.y)/2);
             $('#valenceDiv').css('left', midx - 50);
             $('#valenceDiv').css('top', midy + 15);
         }
     }
     $('#valenceDiv').show();
-    
     $('#valenceInput').slider("option", "value", this.deNormalize(node.valence));
-    
-    //$('#textEditInput').focus();
 }
 
 Graph.prototype.normalize = function(val) {
@@ -966,7 +859,6 @@ Graph.prototype.deNormalize = function(val) {
 
 Graph.prototype.hideValenceSelector = function() {
     $('#valenceDiv').hide();
-    //$('#cam').focus();
 }
 
 // Correct cursor position
@@ -1095,7 +987,6 @@ Graph.prototype.deselect = function(obj) {
 Graph.prototype.clearSelection = function() {
     if (this.selectedObject instanceof Node) {
         this.selectedObject.selected = false;
-        //this.selectedObject.highLight = g.lowColour;
         this.selectedObject = new Object();
     } 
     if (this.selectedObject instanceof Edge) {
@@ -1131,10 +1022,7 @@ Graph.prototype.setSelection = function(newObject) {
 }
 
 Graph.prototype.repaint = function(node) {
-    if (node instanceof Node) {
-        //.this.ctx.clearRect(node.dim.x - node.dim.width/2, node.dim.y - node.dim.height/2,
-        //                   node.dim.width, node.dim.heigt);
-        
+    if (node instanceof Node) {      
         this.ctx.save();
         if (node.valence < this.neutralValence) {
             this.drawHex(this.ctx, node);
@@ -1144,29 +1032,11 @@ Graph.prototype.repaint = function(node) {
             this.drawRect(this.ctx, node);
         }
         this.ctx.clip();
-        
         this.drawNode(this.ctx, node);
-        
         this.ctx.restore();
-        
-        /*for (var i in this.edges) {
-            var e = this.edges[i];
-            if (e.from == node.id || e.to == node.id) {
-                this.drawEdge(this.ctx, e);
-            }
-        }*/
-        
-        //this.drawNode(this.ctx, node);
-        
         return;
     }
-    // HTML5 canvas elements
-    var canvas = document.getElementById(this.canvasName);
-    var ctx = canvas.getContext("2d");
-    
-    // Clear
-    ctx.clearRect(0,0,canvas.width, canvas.height);
-    
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);    
     this.draw();
 }
 

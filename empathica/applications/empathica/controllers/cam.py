@@ -408,17 +408,6 @@ def set_show_title(map_id, show_title):
     else:
         return dict(success=False)
  
-@service.json
-def save_graph(map_id, data):
-    '''
-    params: array of data
-    '''
-    if(auth.has_permission('update', db.Map, map_id)):
-        #todo: parse the json and save the data to the grid I guess
-        return dict(success=True)
-    else:
-        return dict(success=False)
-        
 @auth.requires_login()
 def download():
     map_id = request.args(0)
@@ -427,4 +416,20 @@ def download():
         return HTML(BODY(IMG(_src=cam.imgdata)))
     else:
         raise HTTP(400);
+        
+@auth.requires_login()
+def HOTCO_export():
+    map_id = request.args(0)
+    if(auth.has_permission('read', db.Map, map_id)):
+        data = []
+        data.append('<h1>HOTCO code: </h1><br />')
+        data.append('<h2>Edges: </h2><br />')
+        for row in db(db.Connection.id_map == map_id).select():
+            data.append('(associate %s %s %0.2f) <br />' % (db.Node[row.id_first_node].name, db.Node[row.id_second_node].name, row.valence * 3 ))
+        data.append('<h2>Nodes: </h2><br />')            
+        for node in db(db.Node.id_map == map_id).select():
+            data.append('(associate %s good %0.2f) <br />' % (node.name, node.valence * 3 ))
+        return data
+    else:
+        raise HTTP(400);        
     

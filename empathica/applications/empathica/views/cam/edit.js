@@ -69,11 +69,9 @@ var ignoreSuggestion = function(id) {
 
 jQuery.fn.center = function () {
     this.css("position","absolute");
-    //this.css("top", ( $(window).height() - this.height() ) / 2+$(window).scrollTop() + "px");
     this.css("left", ( $(window).width() - this.width() ) / 2+$(window).scrollLeft() + "px");
     return this;
 }
-
 
 $("#suggestions .concept").draggable({
     opacity: 0.7,
@@ -108,8 +106,6 @@ $("#canvasDiv").droppable({
         // Remove from list
         ui.draggable.remove();
         $("#btnSelect").toolbarButton('toggle'); // [TODO] ALEX MOVE THIS
-        
-        // delete suggestions[ui.draggable.attr('id').split('-').pop()];
     }
 });
 
@@ -122,7 +118,6 @@ var getSuggestionCount = function() {
     return $("#suggestions").children().children().length-1; // -1 for label node
 }
 
-
 /* Buttons
 *******************************************************************************/
 $("#btnSelect").click(function() {
@@ -132,6 +127,7 @@ $("#btnSelect").click(function() {
         .stop(true,true).slideUp(300);
     g.setState(g.stateDefault);
 });
+
 $("#btnAddConcepts").click(function() {
     $("#canvasDiv")
         .css('cursor', 'crosshair');
@@ -141,6 +137,7 @@ $("#btnAddConcepts").click(function() {
     }
     g.setState(g.stateAddingNodes);
 });
+
 $("#btnAddConnections").click(function() {
     $("#canvasDiv")
         .css('cursor', 'crosshair');
@@ -148,6 +145,7 @@ $("#btnAddConnections").click(function() {
         .stop(true,true).slideUp(300);
     g.setState(g.stateAddingEdges);
 });
+
 $("#btnSave").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph();
@@ -155,18 +153,14 @@ $("#btnSave").click(function() {
         message: "Saving. Just a moment... ",
     });
 });
+
 $("#btnExport").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph();
-    setTimeout("window.open('{{=URL('cam','download',args=[cam['id']])}}', '_blank')", 500);
+    //setTimeout("window.location = '{{=URL('cam','download',args=[cam['id']])}}'", 500);
+    setTimeout("window.location = '{{=URL('cam','HOTCO_export',args=[cam['id']])}}'", 500);
 });
-$("#btnAddComments").click(function() {
-    $("#canvasDiv")
-        .css('cursor', 'crosshair');
-    $("#suggestions")
-        .stop(true,true).slideUp(300);
-    g.setState(g.stateAddingComments);
-});
+
 $("#btnZoomFit").click(function() {
     g.centreGraph();
 });
@@ -182,8 +176,6 @@ $("#btnDone").click(function() {
     $.blockUI({
         message: "Saving. Just a moment... ",
     });
-    //setTimeout(function() {location.href = "{{=URL('conflict','overview', args=[conflictid])}}" }, 2000);
-    // TODO: set timeout if ajax calls never return? 
 });
 
 /* Properties Modal
@@ -255,8 +247,7 @@ $("#btnRestore")
 /* Initialization
 *******************************************************************************/
 
-testIt();
+var gg = new Graph();
 g.initGraphFromDB();
 $("#btnSelect").toolbarButton('toggle');
-//$("#btnAddConcepts").toolbarButton('toggle');
 getSuggestions();

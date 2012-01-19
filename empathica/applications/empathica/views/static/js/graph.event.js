@@ -57,7 +57,7 @@ Graph.prototype.initEventListeners = function() {
     
     // Disable 
     document.onkeydown = function (e) { 
-        e = e||window.event; 
+        e = e || window.event; 
         var c = e.keyCode||e.which; 
         if (c == KEY.BACKSPACE && g.interactionMode != g.renamingNode) { 
             return false;
@@ -96,8 +96,9 @@ Graph.prototype.eventKeyDown = function(e) {
     
     if (g.interactionMode != g.renamingNode) {
         if ( KEY.BACKSPACE == code ) {
-            return false;
+            return;
         }
+        
         if ( KEY.ADD_NODES == code ) {         
             $('#btnAddConcepts').toolbarButton('toggle');
             return;
@@ -106,7 +107,7 @@ Graph.prototype.eventKeyDown = function(e) {
             return;
         } 
     }
-    
+
     if (g.selectedObject instanceof Node) {
         if (KEY.DELETE == code && g.interactionMode != g.renamingNode) {
             g.deleteNode(g.selectedObject.id);
@@ -148,12 +149,9 @@ Graph.prototype.nodeRenameHandler = function(e) {
         return false;
     }
     
-    var code;
-        
-    code = e.keyCode;
+    var code = e.keyCode;
     if (!e) {
         code = e.which;
-    } else {
     }
     
     if (KEY.ENTER == code) {           
@@ -224,8 +222,8 @@ Graph.prototype.eventMouseMove = function(e) {
         // Only move shapes if the mouse is pressed
         if (g.mouseDown) {
             g.possibleDeselect = {};
-            var xOffset = mx - g.prevX;
-            var yOffset = my - g.prevY;
+            var xOffset = (mx - g.prevX) / g.zoomScale;
+            var yOffset = (my - g.prevY) / g.zoomScale;
             if (g.interactionMode == g.renamingNode) {
                 // ignore movement on the graph while renaming node
                 return;
@@ -305,11 +303,15 @@ Graph.prototype.eventMouseMove = function(e) {
                 g.positionSlider(g.selectedObject);
                 
             } else if (g.interactionMode == g.draggingGraph) {
+                var xOffset = mx - g.prevX;
+                var yOffset = my - g.prevY;            
+            
                 for (i in g.nodes) {
                     var node = g.nodes[i];
                     node.dim.x += xOffset;
                     node.dim.y += yOffset;
                 }
+                
                 // Update edge midpoints
                 for (var e in g.edges) {
                     var edge = g.edges[e];
@@ -321,14 +323,22 @@ Graph.prototype.eventMouseMove = function(e) {
                     }
                 }
                 
-                // Update total distance moved before mouse up
-                g.totalX += xOffset;
-                g.totalY += yOffset;
+                // Recompute graph origin
+                var nodeCount = 0;
+                g.originX = 0;
+                g.originY = 0;
+                for (var i in g.nodes) {                    
+                    var n = g.nodes[i];
+                    g.originX += n.dim.x;
+                    g.originY += n.dim.y;
+                    nodeCount++;
+                }
+                g.originX /= nodeCount;
+                g.originY /= nodeCount;                
                 
                 if (Math.abs(xOffset) > 0 || Math.abs(yOffset) > 0) {
                     g.resizedOrMoved = true;
-                }
-                
+                }                
             } else if (g.interactionMode == g.multiSelect) {
                 for (var i in g.selection) {
                     if (g.selection[i] instanceof Node) {
@@ -344,8 +354,6 @@ Graph.prototype.eventMouseMove = function(e) {
                     }
                 }
                 
-                g.totalX += xOffset;
-                g.totalY += yOffset;
                 if (Math.abs(xOffset) > 0 || Math.abs(yOffset) > 0) {
                     g.resizedOrMoved = true;
                 }
@@ -355,7 +363,6 @@ Graph.prototype.eventMouseMove = function(e) {
             g.repaint();
         } else {
             g.mouseOverHandler(e);
-            g.repaint();
         }
     } else if (g.inputModeState == g.stateAddingNodes) {
         g.mouseOverHandler(e);
@@ -371,9 +378,9 @@ Graph.prototype.eventMouseMove = function(e) {
             g.ctx.beginPath();
             g.ctx.strokeStyle = g.newEdgeColour;
             g.ctx.lineWidth = g.newEdgeWidth;
-            g.ctx.moveTo(g.addingEdgeFromNode.dim.x, g.addingEdgeFromNode.dim.y);
+            g.ctx.moveTo(g.scaleX(g.addingEdgeFromNode.dim.x), g.scaleY(g.addingEdgeFromNode.dim.y));
             for (var i = 0; i < g.pointArray.length; i++) {
-                g.ctx.lineTo(g.pointArray[i].x, g.pointArray[i].y);
+                g.ctx.lineTo(g.scaleX(g.pointArray[i].x), g.scaleY(g.pointArray[i].y));
             }
             g.ctx.lineTo(mx,my);
             g.ctx.stroke();
@@ -381,10 +388,7 @@ Graph.prototype.eventMouseMove = function(e) {
             g.ctx.strokeStyle = saveStyle;
             g.ctx.lineWidth = saveWidth;
         }
-        
         g.repaint(g.addingEdgeFromNode);
-        
-    } else if (g.inputModeState == g.stateAddingComments) {
     }
 }
 
@@ -407,6 +411,7 @@ Graph.prototype.mouseOverHandler = function(e) {
     } else {
         g.hoverObject = {};
     }
+    g.repaint();
 }
 
 /**
@@ -442,13 +447,12 @@ Graph.prototype.eventMouseUp = function(e) {
                     g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdDim, g.oldDim, g.selectedObject.dim));
                 }
             } else {
-                // Moved entire graph
+                // Moved entire graph, so save all nodes
                 var nodeList = {};
-                for (var i in g.nodes) {
+                for (var i in g.nodes) {                    
                     var n = g.nodes[i];
                     nodeList[n.id] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
                 }
-                
                 g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, "", nodeList));
             }
         } else {
@@ -459,16 +463,8 @@ Graph.prototype.eventMouseUp = function(e) {
         
         // Reset everything for next mousedown event
         g.resizedOrMoved = false;
-        g.totalX = 0;
-        g.totalY = 0;
         g.oldDim = {};
         g.interactionMode = g.draggingNode;
-    } else if (g.inputModeState == g.stateAddingNodes) {
-        
-    } else if (g.inputModeState == g.stateAddingEdges) {
-    
-    } else if (g.inputModeState == g.stateAddingComments) {
-        
     }
 }
 
@@ -507,15 +503,11 @@ Graph.prototype.eventMouseDown = function(e) {
             $('#btnSelect').toolbarButton('toggle');
             
             g.repaint();
-            
             return;
         }
         
-        var canvas = g.canvas;
-        var ctx = g.ctx;
         // Set previous coordinates and mouse down
         g.mouseDown = true;
-
         g.prevX = mx;
         g.prevY = my;
         
@@ -525,6 +517,7 @@ Graph.prototype.eventMouseDown = function(e) {
         
         var replace = true;
         var shiftPressed = false;
+        
         // If Ctrl key pressed, don't replace, but *add* to selection
         if (e.ctrlKey || e.shiftKey) {
             replace = false;
@@ -586,14 +579,7 @@ Graph.prototype.eventMouseDown = function(e) {
                 }
             }
         } else if (g.selectedObject instanceof Edge) {
-            if (oldNode != g.selectedObject) {
-                if (oldNode instanceof Node) {
-                    
-                }
-            }
-                g.showValenceSelector(g.selectedObject, mx, my);
-        } else if (newNode == g.handle) {
-            
+            g.showValenceSelector(g.selectedObject, mx, my);
         } else if (g.interactionMode == g.multiSelect || g.interactionMode == g.draggingGraph) {
             g.hideValenceSelector();
         }
@@ -614,14 +600,16 @@ Graph.prototype.eventMouseDown = function(e) {
             $("#btnSelect").toolbarButton('toggle');
             return;
         }
+        
         var node = g.getNodeUnderPointer(mx, my);
         if (node == g.notANode) {
             // Check if its a complex edge and we've already added one node
             if (g.allowComplexEdge && g.interactionMode == g.addingEdgeAddedOne) {
-                g.pointArray.push(new Point(mx, my));
+                g.pointArray.push(new Point(g.unscaleX(mx), g.unscaleY(my)));
             }
             return;
         }
+        
         if (g.interactionMode == g.addingEdgeAddedZero) {
             g.addingEdgeFromNode = node;
             g.interactionMode = g.addingEdgeAddedOne;
@@ -643,27 +631,19 @@ Graph.prototype.eventMouseDown = function(e) {
             }
             // reset midpoint array
             g.pointArray = [];
+            
             // reset state
             g.addingEdgeFromNode = new Object();
-            
-            //g.interactionMode = g.addingEdgeAddedZero;
-        
             $("#btnSelect").toolbarButton('toggle');
+            if (typeof(edge) == "object")
+            {
+                g.select(edge, true);   
+                g.showValenceSelector(g.selectedObject);
+            }
             
-            g.select(edge, true);   
-            g.showValenceSelector(g.selectedObject);
-   
             g.repaint();
         }
-        
-    } else if (g.inputModeState == g.stateAddingComments) {
-        if (e.button == 2) {
-            g.setState(g.stateDefault);
-            return;
-        }
     }
-    
-    
 }
 
 /**
@@ -686,8 +666,8 @@ Graph.prototype.eventMouseDoubleClick = function(e) {
     of a CAM. 
 **/
 Graph.prototype.eventMouseWheel = function (e) {
-    return true;
-    //debugOut(e);
+    //return true;
+
     var canvas = document.getElementById(g.canvasName);
     var ctx = canvas.getContext("2d");
     
@@ -705,29 +685,18 @@ Graph.prototype.eventMouseWheel = function (e) {
     }
     
     var wheel = move;//n or -n
-    
-    debugOut('wheel ' + wheel);
-
     var zoom = 1 + wheel/2;
     
-    debugOut('zoom ' + zoom);
-    
-    //ctx.translate(g.originX, g.originY);
-    
-    ctx.scale(zoom, zoom);
-    /*ctx.translate(
-        -( mx / g.ZoomScale + g.originX - mx / ( g.ZoomScale * zoom ) ),
-        -( my / g.ZoomScale + g.originY - my / ( g.ZoomScale * zoom ) )
-    );*/
-    
-    //g.originX = ( mx / g.ZoomScale + g.originX - mx / ( g.ZoomScale * zoom ) );
-    //g.originY = ( my / g.ZoomScale + g.originY - my / ( g.ZoomScale * zoom ) );
-    
-    g.zoomScale *= zoom;
+    g.zoomScale = Math.min(Math.max(g.zoomScale + (1 - zoom) / 5, g.maxZoomIn), g.maxZoomOut);
+    g.zoomScale = Math.round(g.zoomScale * Math.pow(10, 2)) / Math.pow(10, 2);
     
     debugOut('g.zoomScale ' + g.zoomScale);
     
+    g.hideValenceSelector();
     g.repaint();
+    if (g.selectedObject instanceof Node || g.selectedObject instanceof Edge) {
+        g.showValenceSelector(g.selectedObject);
+    }
 }
 
 /**

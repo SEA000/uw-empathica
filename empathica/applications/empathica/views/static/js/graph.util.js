@@ -13,7 +13,6 @@ var debug = true;
     Works with either Dev Tools in Chrome/IE or FireBug in Firefox
 **/
 function debugOut( data ) {
-        
     if (debug) {
         log(data);
     }

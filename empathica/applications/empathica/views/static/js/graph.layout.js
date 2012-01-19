@@ -125,6 +125,8 @@ Graph.prototype.centreGraph = function() {
         g.showValenceSelector(g.selectedObject);
     }
     
+    this.originX = canvas.width/2;
+    this.originY = canvas.height/2;
     this.pushToUndo(new Command(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues));
     
     this.repaint();

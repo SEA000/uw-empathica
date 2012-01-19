@@ -12,7 +12,6 @@
     Available states: 
         Graph.stateAddingNodes
         Graph.stateAddingEdges
-        Graph.stateAddingComments
         Graph.stateDefault
  **/
 Graph.prototype.setState = function(state) {
@@ -23,7 +22,7 @@ Graph.prototype.setState = function(state) {
     Retrieve Graph data from the database on page load
 **/
 Graph.prototype.initGraphFromDB = function() {
-    return this.db_getGraphData();
+    this.db_getGraphData();
 }
 
 /**

@@ -576,6 +576,19 @@ Graph.prototype.db_getGraphData = function() {
                 } else {
                     g.setTheme(THEMES.DEFAULT);
                 }
+
+                // Get the graph origin
+                var nodeCount = 0;
+                g.originX = 0;
+                g.originY = 0;
+                for (var i in g.nodes) {                    
+                    var n = g.nodes[i];
+                    g.originX += n.dim.x;
+                    g.originY += n.dim.y;
+                    nodeCount++;
+                }
+                g.originX /= nodeCount;
+                g.originY /= nodeCount;                
                 
                 g.repaint();
             } else {
