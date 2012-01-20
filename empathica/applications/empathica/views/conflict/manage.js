@@ -35,7 +35,7 @@ $(".btnClose")
                         $(this).remove();
                         location.href = "{{=URL('manage')}}";
                     });
-                } else { /* [TODO] */ }
+                } else { alert('You are not authorized to close this conflict.'); }
                 return false;
             }
         ).error(function(json) {});
@@ -55,7 +55,7 @@ $(".btnDelete")
                         $(this).remove();
                         location.href = "{{=URL('manage')}}";
                     });
-                } else { /* [TODO] */ }
+                } else { alert('You are not authorized to delete this conflict.'); }
                 return false;
             }
         ).error(function(json) {});

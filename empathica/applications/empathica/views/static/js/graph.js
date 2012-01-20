@@ -199,6 +199,31 @@ function Graph() {
     g = this;
 }
 
+// Concept nodes
+function Node (id, text, nodeValence) {
+    this.id = id;
+    this.text = text;
+    this.valence = nodeValence;
+    this.dim = {};
+    this.newNode = true;
+}
+
+// Connections
+function Edge(id, from, to, v) {
+    this.id = id;
+    this.from = from;
+    this.to = to;
+    this.valence = v;
+    this.innerPoints = new Array();
+    this.complex = false;
+}
+
+// An intermediate point in the edge
+function Point(x,y) {
+    this.x = x;
+    this.y = y;
+}
+
 /*
     Method to set state from the UI interface above the graph
     Available states: 
@@ -272,24 +297,20 @@ Graph.prototype.positionSlider = function(node) {
     $('#valenceDiv').css('top', this.scaleY(node.dim.y + node.dim.height/2) + 10);
 }
 
-// Concept nodes
-function Node (text, nodeValence) {
-    this.text = text;
-    this.valence = nodeValence;
-    this.newNode = true;
-}
-
 // Add a node from the suggestion list
 Graph.prototype.suggestedNode = function( id, nodeText, nodeValence, x, y) {
-    var n = new Node(nodeText, nodeValence);
-    n.id = id;
-    n.dim = {};
-    this.setPosition(n, x, y);
-    
+
+    // Create node
+    var n = new Node(id, nodeText, nodeValence);
+
+    // Add to control structures
     this.nodes[n.id] = n;
     this.drawOrder.push(n.id);
-    this.setSizeByText(this.ctx, n, true);
     
+    // Change the display
+    this.setPosition(n, x, y);
+    this.setSizeByText(this.ctx, n, true);
+        
     this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdAddSuggested, "", n));
     g.db_addNode(n);
     
@@ -302,68 +323,55 @@ Graph.prototype.addNode = function( nodeText, nodeValence, x, y ) {
         return this.VALENCE_OUT_OF_RANGE;
     } 
     
-    var n = new Node(nodeText, nodeValence);
+    // Create node
+    var n = new Node(guid(), nodeText, nodeValence);
     
-    // Make call to DB to get the real new ID later
-    n.id = guid();
-    n.dim = {};
-    
+    // Push node to undo stack
     this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdNodePlaceholder, "", n.id));
     
-    this.setPosition(n, x, y);
-    
+    // Add to control structures
     this.nodes[n.id] = n;
     this.drawOrder.push(n.id);
     
+    // Change the display
+    this.setPosition(n, x, y);
     this.setSizeByText(this.ctx, n, true);
+
+    // Repaint
     this.repaint();
-    
+
     return n;
-}
-
-// Connections!
-function Edge(id1, id2, v) {
-    this.from = id1;
-    this.to = id2;
-    this.valence = v;
-    this.innerPoints = new Array();
-    this.complex = false;
-}
-
-function Point(x,y) {
-    this.x = x;
-    this.y = y;
 }
 
 // Edge added through UI
 Graph.prototype.addEdge = function( id1, id2, v, inPts) {
-    // Verify that the nodes exist
+    // Verify that the nodes exist and that the edge is not a self cycle
     if (typeof(this.nodes[id1]) == "undefined" || typeof(this.nodes[id2]) == "undefined" || id1 == id2) {
         return this.NODEID_INVALID;
-    } else if (v < this.minValence || v > this.maxValence) {
+    }
+    
+    if (v < this.minValence || v > this.maxValence) {
         return this.VALENCE_OUT_OF_RANGE;
     }
     
-    var e = new Edge(id1, id2, v);
-    e.id = guid();
-    
+    // Create a new edge
+    var e = new Edge(guid(), id1, id2, v);
     if (inPts) { // exists and true
         // add points to complex edge
         e.innerPoints = inPts;
         e.complex = true;
     }
+    e.selected = false;
+    e.newEdge = true;    
     
+    // Add it to the undo stack
     this.pushToUndo(new Command(this.cmdEdge, e.id, this.cmdNodePlaceholder, "", e.id));
     
-    e.from = id1;
-    e.to = id2;
-    e.valence = v;
-    e.selected = false;
-    e.newEdge = true;
+    // Insert into datastructures
     this.edges[e.id] = e;
     
-    this.db_addEdge(e);
-    this.pushToUndo(new Command(this.cmdEdge, e.id, this.cmdAddDB, "", e.id));
+    // Repaint
+    this.repaint();
     
     return e;
 }
@@ -376,10 +384,9 @@ Graph.prototype.setNodeText = function(id, newText) {
     if (typeof(node) == "undefined") {
         return this.NODEID_INVALID;
     }
-    var oldText = node.text;
-    node.text = newText;
     
-    this.pushToUndo(new Command(this.cmdNode, id, this.cmdText, oldText, node.text));
+    this.pushToUndo(new Command(this.cmdNode, id, this.cmdText, node.text, newText));
+    node.text = newText;    
     
     this.repaint();
 }
@@ -389,6 +396,7 @@ Graph.prototype.setNodeValence = function(id, newValence) {
     if (typeof(node) == "undefined") {
         return NODEID_INVALID;
     }
+    
     if (newValence < this.minValence || newValence > this.maxValence) {
         return this.VALENCE_OUT_OF_RANGE;
     }
@@ -412,10 +420,9 @@ Graph.prototype.deleteNode = function(id) {
     }
     
     // Copy
-    var dead = new Node(node.text, node.valence);
+    var dead = new Node(node.id, node.text, node.valence);
     dead.selected = node.selected;
     dead.newNode = node.newNode;
-    dead.id = node.id;
     dead.dim = { 'x': node.dim.x, 'y': node.dim.y, 'width': node.dim.width, 'height': node.dim.height };
     
     // Remove the node from the drawOrder queue
@@ -472,17 +479,19 @@ Graph.prototype.deleteEdge = function(id) {
     
     var deletingNewEdge = edge.newEdge;
     
-    var dead = new Edge(edge.from, edge.to, edge.valence);
+    var dead = new Edge(edge.id, edge.from, edge.to, edge.valence);
     dead.selected = edge.selected;
     dead.newEdge = edge.newEdge;
-    dead.id = edge.id;
     
+    // Update the selected object
     if (edge.selected) {
         this.selectedObject = {};
     }
     
+    // Remove from the data struct
     delete this.edges[id];
     
+    // If it is a new edge, then remove by token id
     if (deletingNewEdge) {
         this.removeFromUndoById(id);
     } else {
@@ -519,12 +528,7 @@ Graph.prototype.setPosition = function(n, x, y) {
     if (x && y) {
         n.dim.x = g.unscaleX(x);
         n.dim.y = g.unscaleY(y);
-    } else {    
-        var canvas = document.getElementById(this.canvasName);
-        n.dim.x = n.dim.width/2 + Math.random() * (canvas.width - 10 - n.dim.width);
-        n.dim.y = n.dim.height/2 + Math.random() * (canvas.height - 10 - n.dim.height);
     }
-    
     this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdDim, oldDim, n.dim));
 }
 
@@ -598,7 +602,6 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
     }
     
     return lineArray;
-    
 }
 
 Graph.prototype.lengthOfLongestLine = function(ctx, lineArray) {
@@ -616,6 +619,7 @@ Graph.prototype.getTextLines = function(ctx, node) {
     if (node.text == null) {
         return new Array();
     }
+    
     var words = node.text.split(' ');
     var arr = new Array();
     var lineSoFar = "";
@@ -1048,6 +1052,7 @@ Graph.prototype.createSaveString = function() {
     var save = {};
     save.nodes = {};
     save.edges = {};
+    
     for (var i in this.nodes) {
         save.nodes[i] = this.nodes[i];
     }
@@ -1055,15 +1060,36 @@ Graph.prototype.createSaveString = function() {
     for (var i in this.edges) {
         save.edges[i] = this.edges[i];
     }
-    
-    var saveString = JSON.stringify(save);
-    
-    return saveString;
+
+    return JSON.stringify(save);
 }
 
 // Recreates the graph
 Graph.prototype.generateGraphFromString = function(saveText) {
     var save = JSON.parse(saveText);
-    this.nodes = save.nodes;
-    this.edges = save.edges;
+
+    // Remove all existing nodes
+    for (var i in this.nodes) {
+        this.deleteNode(i);
+    }
+    
+    for (var i in this.edges) {
+        this.deleteEdge(i);
+    }
+    
+    // Add exported nodes
+    nodeMap = {};
+    for (var i in save.nodes) {
+        var node = save.nodes[i];
+        var newNode = this.addNode(node.text, node.valence, node.dim.x, node.dim.y);
+        nodeMap[node.id] = newNode.id;
+    }
+    
+    for (var i in save.edges) {
+        var edge = save.edges[i];
+        this.addEdge(nodeMap[edge.from], nodeMap[edge.to], edge.valence, edge.innerPoints);
+    }
+    
+    // Push nodes and edges to DB
+    g.db_setGraphData(this.nodes, this.edges);
 }

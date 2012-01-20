@@ -36,8 +36,7 @@ Graph.prototype.drawNodes = function(ctx) {
     for (var i = 0; i < this.drawOrder.length; i++) {
         var node = this.nodes[this.drawOrder[i]];
         this.drawNode(ctx, node);
-    }
-    
+    }   
 }
 
 /**
@@ -343,9 +342,6 @@ Graph.prototype.createImage = function(thumb) {
         canvasCopy.width = Math.min(bounds.right - bounds.left + 10, canvas.width);
         canvasCopy.height = Math.min(bounds.bottom - bounds.top + 10, canvas.height);
         var contextCopy = canvasCopy.getContext("2d");
-        debugOut(bounds);
-        debugOut(canvasCopy.width);
-        debugOut(canvasCopy.height);
         contextCopy.drawImage(canvas, Math.max(0, bounds.left-5), Math.max(0, bounds.top-5), canvasCopy.width, canvasCopy.height, 0, 0, canvasCopy.width, canvasCopy.height);
     }
     return canvasCopy.toDataURL("image/png");

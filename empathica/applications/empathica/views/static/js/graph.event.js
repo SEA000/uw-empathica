@@ -167,7 +167,7 @@ Graph.prototype.nodeRenameHandler = function(e) {
         }
         g.setNodeText(g.selectedObject.id, text);
         g.hideTextEditor();
-        g.setSizeByText(document.getElementById(g.canvasName).getContext('2d'), g.selectedObject);
+        g.setSizeByText(g.ctx, g.selectedObject);
         g.repaint();
         
         // Check if naming a new node for the first time
@@ -303,6 +303,7 @@ Graph.prototype.eventMouseMove = function(e) {
                 g.positionSlider(g.selectedObject);
                 
             } else if (g.interactionMode == g.draggingGraph) {
+            
                 var xOffset = mx - g.prevX;
                 var yOffset = my - g.prevY;            
             
@@ -491,13 +492,13 @@ Graph.prototype.eventMouseDown = function(e) {
             }
             g.setNodeText(g.selectedObject.id, text);
             g.hideTextEditor();
-            g.setSizeByText(document.getElementById(g.canvasName).getContext('2d'), g.selectedObject);
+            g.setSizeByText(g.ctx, g.selectedObject);
             
             // Check if naming a new node for the first time
             if (g.selectedObject.newNode) {
                 // If new node, then save it in the database
-                g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdAddDB, "", g.selectedObject.id));
-                g.db_addNode(g.selectedObject);
+                g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdAddDB, "", g.selectedObject.id));                                
+                g.db_addNode(g.selectedObject);                
             }
             
             $('#btnSelect').toolbarButton('toggle');
@@ -628,15 +629,17 @@ Graph.prototype.eventMouseDown = function(e) {
             if (!edgeExists) {
                 // add edge
                 edge = g.addEdge(g.addingEdgeFromNode.id, node.id, g.defaultValence, g.pointArray);
+                g.db_addEdge(edge);
+                g.pushToUndo(new Command(g.cmdEdge, edge.id, g.cmdAddDB, "", edge.id));
             }
+            
             // reset midpoint array
             g.pointArray = [];
             
             // reset state
             g.addingEdgeFromNode = new Object();
             $("#btnSelect").toolbarButton('toggle');
-            if (typeof(edge) == "object")
-            {
+            if (typeof(edge) == "object") {
                 g.select(edge, true);   
                 g.showValenceSelector(g.selectedObject);
             }

@@ -8,8 +8,9 @@ $("#btnAddConnections").toolbarButton({ icon: 2, group: "inputMode" });
 $("#btnSave").toolbarButton({ icon: 3, group: "inputMode" });
 $("#btnExport").toolbarButton({ icon: 4, group: "inputMode" });
 $("#btnAddComments").toolbarButton({ icon: 5, group: "inputMode" });
-$("#btnZoomFit").toolbarButton({ icon: 6 });
-$("#btnSettings").toolbarButton({ icon: 7 });
+$("#btnZoomFit").toolbarButton({ icon: 6, group: "inputMode" });
+$("#btnSettings").toolbarButton({ icon: 7, group: "inputMode" });
+
 $.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/nav.png')}}";
 $("#btnDone").toolbarButton({ icon: 6, label: "Done" });
 
@@ -32,7 +33,7 @@ var addSuggestion = function(id, name) {
         // ignore-x
         var id = $(this).attr('id').split('-').pop();
         ignoreSuggestion(id);
-    });;
+    });
     suggestions[id] = name;
 }
 
@@ -42,7 +43,6 @@ var getSuggestions = function() {
         {'map_id': {{=cam.id}}},
         function(data) {
             if (!data.success) { return false; }
-            debugOut('getSuggestions');
             $.each(data.suggestions, function(i,suggestion) {
                 addSuggestion(suggestion[0], suggestion[1]);
             });

@@ -29,7 +29,7 @@ Graph.prototype.socketOnMessage = function(message)
         {
             var layoutAfter = false;
             var text = record.text;
-            var n = new Node(text, record.valence);
+            var n = new Node(record.id, text, record.valence);
             n.dim = record.dim;
             if (!n.dim.x || n.dim.x == null) {
                 layoutAfter = true;
@@ -37,7 +37,6 @@ Graph.prototype.socketOnMessage = function(message)
             n.selected = false;
             n.newNode = false;
             n.highLight = g.lowColour;
-            n.id = record.id;
             g.nodes[n.id] = n;
             g.drawOrder.push(n.id);
             

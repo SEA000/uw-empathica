@@ -95,7 +95,7 @@ Graph.prototype.squishAndSave = function(count) {
     var toSave = this.undoStack.splice(0,n);
     var hash = new CmdHash();
     for (var i in toSave) {
-        var cmd = toSave[i];
+        var cmd = toSave[i];        
         if (cmd.property == this.cmdLayout) {
             // If a layout command, then add all of its constituents to the hash
             for (id in cmd.newValue) {
@@ -180,7 +180,6 @@ Graph.prototype.saveHash = function(cmdHash) {
                 var newValue = props[this.cmdDeleteDB];
                 this.db_deleteEdge(newValue);
             }
-            
         }
     }
 }
