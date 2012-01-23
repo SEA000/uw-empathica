@@ -82,26 +82,23 @@ Graph.prototype.centreGraph = function() {
     var oldValues = {};
     var newValues = {};
     
-    // Calculate the current and theoretical centres
-    var curC = [0,0];
+    // Calculate the theoretical center of the CAM
+    var dx = 0;
+    var dy = 0;
     var nodeCount = 0;
     for (var i in this.nodes) {
         nodeCount++;
         var n = this.nodes[i];
-        curC[0] += n.dim.x;
-        curC[1] += n.dim.y;
+        dx -= n.dim.x;
+        dy -= n.dim.y;
         oldValues[i] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
     }
-    curC[0] /= nodeCount;
-    curC[1] /= nodeCount;
+    if (nodeCount != 0) {
+        dx /= nodeCount;
+        dy /= nodeCount;
+    }
     
-    var canvasC = [canvas.width/2, canvas.height/2];
-    
-    // Calculate difference from canvas' centre
-    var dx = canvasC[0] - curC[0];
-    var dy = canvasC[1] - curC[1];
-    
-    // Adjust positions
+    // Move components so that the graph origin and theoretical origin coincide
     for (var i in this.nodes) {
         var n = this.nodes[i];
         n.dim.x += dx;

@@ -13,7 +13,31 @@
     Author:         Alex Bass
     Last Updated:   2011-04-17
  **/ 
-
+ 
+/**
+    Process a DB save the command hash.
+**/
+Graph.prototype.db_saveHash = function(hash) {
+    var url = "{{=URL('call/json/save_hash')}}";
+    
+    this.incrementPendingSaves();
+    $.getJSON(
+        url,
+        {   
+            map_id:     g.mapID, 
+            hash:       JSON.stringify(hash)      
+        }, function(data) {
+            if (g.db_validate_response(data)) {
+                debugOut('Command hash successfully saved.');
+            }
+            g.decrementPendingSaves();
+        }
+    ).error(function(data) {
+        alert('Oops. Empathica failed to the changes you have made. Please, retry.');
+        g.decrementPendingSaves();
+    });
+}
+ 
 /**
     Add a new node on the Graph to the DB
 **/
@@ -144,166 +168,6 @@ Graph.prototype.db_deleteEdge = function(edge) {
 }
 
 /**
-    Change the valence of an Edge in the DB
-**/ 
-Graph.prototype.db_editEdgeValence = function(eid, newValence) {
-    var edge = this.edges[eid];
-    if (! (edge instanceof Edge) ) {
-        debugOut('Tried to edit valence of an inexisting edge!');
-        return;
-    }
-    
-    var url = "{{=URL('call/json/edit_connection_valence')}}";
-    
-    this.incrementPendingSaves();
-    $.getJSON(
-        url,
-        {   
-            map_id:         g.mapID, 
-            edge_id:        eid,
-            valence:        newValence
-        }, function(data) {
-            if (g.db_validate_response(data)) {
-                debugOut('Edge valence successfully changed.');
-            } 
-            g.decrementPendingSaves();
-        }
-    ).error(function(data) {
-        alert('Oops. Empathica failed to alter the valence of edge with id [' + edge.id + '].');
-        g.decrementPendingSaves();
-    });
-}
-
-/**
-    For complex edges consisting of a number of intermediary points, change the
-    positions of those points stored in the DB
-**/
-Graph.prototype.db_editEdgeInnerPoints = function(edge) {
-    var edge = this.edges[eid];
-    if (! (edge instanceof Edge) ) {
-        debugOut('Tried to edit inner points of an inexisting edge!');
-        return;
-    }
-
-    var url = "{{=URL('call/json/edit_connection_inner_points')}}";
-    
-    this.incrementPendingSaves();
-    $.getJSON(
-        url,
-        {   
-            map_id:         g.mapID, 
-            edge_id:        edge.id,
-            inner_points:   JSON.stringify(edge.innerPoints)
-        }, function(data) {
-            if (g.db_validate_response(data)) {
-                debugOut('Edge inner points successfully modified.');
-            } 
-            g.decrementPendingSaves();
-        }
-    ).error(function(data) {
-        alert('Oops. Empathica failed to alter the inner points of edge with id [' + edge.id + '].');
-        g.decrementPendingSaves();
-    });
-}
-
-/**
-    Change the name (text) of a node in the DB
-**/ 
-Graph.prototype.db_renameNode = function(nid, newName) {
-    var node = this.nodes[nid];
-    if (! (node instanceof Node) ) {
-        debugOut('Tried to rename an inexisting node!');
-        return;
-    }
-
-    var url = "{{=URL('call/json/rename_node')}}";
-    
-    this.incrementPendingSaves();
-    $.getJSON(
-        url,
-        {   
-            map_id:         g.mapID, 
-            node_id:        nid,
-            name:           newName
-        }, function(data) {
-            if (g.db_validate_response(data)) {
-                debugOut('Node successfully renamed.');
-            }
-            g.decrementPendingSaves();
-        }
-    ).error(function(data) {
-        alert('Oops. Empathica failed to rename node [' + node.text + '].');
-        g.decrementPendingSaves();
-    });
-}
-
-/**
-    Change the valence of a Node in the DB
-**/
-Graph.prototype.db_editNodeValence = function(nid, newValence) {
-    var node = this.nodes[nid];
-    if (! (node instanceof Node) ) {
-        debugOut('Tried to change the valence of an inexisting node!');
-        return;
-    }
-    
-    var url = "{{=URL('call/json/edit_node_valence')}}";
-    
-    this.incrementPendingSaves();
-    $.getJSON(
-        url,
-        {   
-            map_id:         g.mapID, 
-            node_id:        nid,
-            valence:        newValence
-        }, function(data) {
-            if (g.db_validate_response(data)) {
-                debugOut('Node valence successfully changed.');
-            }
-            g.decrementPendingSaves();
-        }
-    ).error(function(data) {
-        alert('Oops. Empathica failed to change the valence of node [' + node.text + '].');
-        g.decrementPendingSaves();
-    });
-    
-}
-
-/**
-    Change the size/position of a Node in the DB
-**/
-Graph.prototype.db_editNodeDim = function(nid, dim) {
-    var node = this.nodes[nid];
-    if (! (node instanceof Node) ) {
-        debugOut('Tried to change the dimensions of an inexisting node!');
-        return;
-    }    
-    
-    var url = "{{=URL('call/json/edit_node_dim')}}";
-    
-    this.incrementPendingSaves();
-    $.getJSON(
-        url,
-        {   
-            map_id:         g.mapID, 
-            node_id:        nid,
-            x:              dim.x,
-            y:              dim.y,
-            width:          dim.width,
-            height:         dim.height
-        }, function(data) {
-            if (g.db_validate_response(data)) {
-                debugOut('Node dimensions successfully changed.');
-            }
-            g.decrementPendingSaves();
-        }
-    ).error(function(data) {
-        alert('Oops. Empathica failed to change the dimensions of node [' + node.text + '].');
-        g.decrementPendingSaves();
-    });
-}
-
-/**
     Retrieve data for this Map from the DB and populate the Graph
 **/
 Graph.prototype.db_getGraphData = function() {
@@ -366,20 +230,18 @@ Graph.prototype.db_getGraphData = function() {
                 } else {
                     g.setTheme(THEMES.DEFAULT);
                 }
-
-                // Get the graph origin
-                var nodeCount = 0;
-                g.originX = 0;
-                g.originY = 0;
-                for (var i in g.nodes) {                    
-                    var n = g.nodes[i];
-                    g.originX += n.dim.x;
-                    g.originY += n.dim.y;
-                    nodeCount++;
+                
+                debugOut(data.mapdata.origin);
+                
+                g.originX = data.mapdata.origin['x'];
+                g.originY = data.mapdata.origin['y'];
+                
+                // Make sure the origin is not null
+                if (g.originX == null) {
+                    g.originX = 0;
                 }
-                if (nodeCount > 0) {
-                    g.originX /= nodeCount;
-                    g.originY /= nodeCount;
+                if (g.originY == null) {
+                    g.originY = 0;
                 }
                 
                 g.repaint();
@@ -392,6 +254,7 @@ Graph.prototype.db_getGraphData = function() {
     });
 }
 
+// Sets the graph data based on the input nodes and edges
 Graph.prototype.db_setGraphData = function(nodes, edges)
 {
     var url = "{{=URL('call/json/set_graph_data')}}";
@@ -442,7 +305,11 @@ Graph.prototype.db_saveImage = function(imgdata, isThumbnail) {
             imgdata:        imgdata
         }, function(data) {
             if (g.db_validate_response(data)) {
-                debugOut("Save thumbnail success!");
+                if (isThumbnail) {
+                    debugOut("Save thumbnail success!");
+                } else {
+                    debugOut("Save image success!");
+                }
             }
             g.decrementPendingSaves();
         }

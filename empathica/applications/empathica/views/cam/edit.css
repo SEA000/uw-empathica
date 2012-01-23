@@ -7,8 +7,8 @@ html, body { background: #fff; }
 #header .wrapper { width: 100%;}
 #header-logo { position: relative; left: 0; margin: 0; }
 #header .center {
-    height: 44px; width: 538px;
-    position: absolute; left: 50%; margin-left: -269px;
+    height: 44px; width: 670px;
+    position: absolute; left: 50%; margin-left: -335px;
 }
 #header ul li { float: left; }
 
@@ -66,27 +66,15 @@ html, body { background: #fff; }
 }
 #suggestions li.concept .concept-x {
    display: inline-block;
-/*
-   margin-left: 5px;
-   margin-bottom: 1px;
-   margin-right: 4px;
-   width: 7px; 
-height: 7px; 
-*/
-    float: right;
+   float: right;
    padding: 9px 5px 9px 5px;
    cursor: pointer !important;
-   
-    /*
-position: absolute; right: 15px; top: -21px; display: block;*/
-
-
 }
+
 #suggestions li.concept .concept-x .concept-x-icon {
     background: url("{{=URL('static','images/icons/tag-x.gif')}}");
-   width: 7px; 
-height: 7px; 
-
+    width: 7px; 
+    height: 7px; 
 }
 
 #suggestions li.concept .concept-x:hover {

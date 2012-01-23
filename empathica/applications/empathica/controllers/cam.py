@@ -93,18 +93,22 @@ def get_graph_data(map_id):
     Parse through and return all the map information.
     '''
     if(auth.has_permission('read', db.Map, map_id)):
+        cam = db.Map[map_id]
         nodes = {}
         edges = {}
-        theme = db.Map[map_id].theme
+        
         for row in db(db.Connection.id_map == map_id).select():
             edges[row.id] = { 'id': row.id, 'valence': row.valence, 'inner_points': row.inner_points, 'from': row.id_first_node, 'to': row.id_second_node, 'selected': False }
+            
         for node in db(db.Node.id_map == map_id).select():
             nodes[node.id] = { 'id': node.id, 'text': node.name, 'valence': node.valence, 'dim': { 'x': node.x, 'y': node.y, 'width' : node.width, 'height' : node.height }, 'selected': False, 'newNode': False }
+            
         mapdata = {
                 'mapid' : map_id,
                 'nodes' : nodes,
                 'edges' : edges,
-                'theme' : theme
+                'theme' : cam.theme,
+                'origin': {'x' : cam.originX, 'y' : cam.originY}
         }
         return dict(success=True, mapdata=mapdata)
     else:
@@ -142,6 +146,58 @@ def set_graph_data(map_id, nodes, edges):
         return dict(success=True, node_ids=node_ids, edge_ids=edge_ids)
     else:
         return dict(success=False)
+
+@service.json
+def save_hash(map_id, hash):
+
+    if not auth.has_permission('update', db.Map, map_id):
+        return dict(success=False)
+
+    commands = json.loads(hash)
+
+    if 'cmdNode' in commands:
+        # Get list of node ids 
+        for node_id, properties in commands['cmdNode'].items():
+            # List of properties to be updated for this node id
+            if 'cmdDeleteDB' not in properties:
+                # No node deletion in list
+                for property, newValue in properties.items():
+                    if property == 'cmdValence':
+                        db_edit_node_valence(map_id, node_id, newValue)
+                    elif property == 'cmdText':
+                        db_rename_node(map_id, node_id, newValue)
+                    elif property == 'cmdDim':
+                        db_edit_node_dim(map_id, node_id, newValue['x'], newValue['y'], newValue['width'], newValue['height'])
+                    elif property == 'cmdGraphMove':
+                        db_save_origin(map_id, newValue['x'], newValue['y'])
+            else:   # don't care about other property updates - just do a delete
+                db_remove_node(map_id, node_id)
+    
+    # Then save any edge changes
+    if 'cmdEdge' in commands:
+        # Get list of edge ids 
+        for edge_id, properties in commands['cmdEdge'].items():
+            # List of properties to be updated for this edge id
+            if 'cmdDeleteDB' not in properties:
+                # No edge deletion in list
+                for property, newValue in properties.items():
+                    if property == 'cmdValence':
+                        db_edit_connection_valence(map_id, edge_id, newValue)
+            else:   # don't care about other property updates - just do a delete
+                db_remove_connection(map_id, edge_id)
+    
+    return dict(success=True)
+    
+@service.json
+def save_origin(map_id, originX, originY):
+    '''
+    Saves the CAM origin.
+    '''
+    if not auth.has_permission('update', db.Map, map_id):
+        return dict(success=False)
+        
+    db_save_origin(map_id, originX, originY)
+    return dict(success=True)
         
 @service.json
 def add_node(map_id, token, x, y, width, height, name):
@@ -149,220 +205,176 @@ def add_node(map_id, token, x, y, width, height, name):
     Adds a node to the database.
     Note: By default set valences to 0 for new nodes.
     '''
-    if(auth.has_permission('update', db.Map, map_id)):
-        map = db.Map(map_id)
-        node_id = db.Node.insert(id_map = map_id, valence = 0, x = x, y = y, width = width, height = height, name = name)
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email, is_empty = False)
-
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                node = {    'id': node_id, 
-                            'text': name, 
-                            'valence': 0, 
-                            'dim': 
-                                { 
-                                    'x': float(x), 
-                                    'y': float(y), 
-                                    'width' : float(width), 
-                                    'height' : float(height),
-                                }, 
-                            'selected': False, 
-                            'newNode': False,
-                        }
-                message = { 'type': 'nodeadd',
-                            'node': node }
-                for to_id in maplisteners:
-                    channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
-
-        return dict(success=True, token=token, node_id=node_id)
-    else:
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False, token=token)
+        
+    node_id = db_add_node(map_id, token, x, y, width, height, name)
+
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            node = {    'id': node_id, 
+                        'text': name, 
+                        'valence': 0, 
+                        'dim': 
+                            { 
+                                'x': float(x), 
+                                'y': float(y), 
+                                'width' : float(width), 
+                                'height' : float(height),
+                            }, 
+                        'selected': False, 
+                        'newNode': False,
+                    }
+            message = { 'type': 'nodeadd',
+                        'node': node }
+            for to_id in maplisteners:
+                channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
+
+    return dict(success=True, token=token, node_id=node_id)
 
 @service.json
 def remove_node(map_id, node_id):
     '''
     Removes a node from the database.
     '''
-    map_id = db.Node[node_id].id_map
-    if(auth.has_permission('update', db.Map, map_id)):
-        db(db.Connection.id_first_node == node_id).delete()
-        db(db.Connection.id_second_node == node_id).delete()
-        del db.Node[node_id]
-        
-        updated_map_info = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        if db(db.Node.id_map == map_id).count() > 0:
-            updated_map_info['is_empty'] = False
-        else:
-            updated_map_info['is_empty'] = True
-        db.Map[map_id] = updated_map_info
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                message = { 'type': 'noderemove',
-                            'nodeid': node_id }
-                for to_id in maplisteners:
-                    channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
-
-        return dict(success=True)
-    else:
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False)
+    
+    db_remove_node(map_id, node_id)
 
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            message = { 'type': 'noderemove',
+                        'nodeid': node_id }
+            for to_id in maplisteners:
+                channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
+
+    return dict(success=True)
 
 @service.json
 def rename_node(map_id, node_id, name):
     '''
     Renames a node.
     '''
-    map_id = db.Node[node_id].id_map
-    if(auth.has_permission('update', db.Map, map_id)):
-        db.Node[node_id] = dict(name=name)
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                message = { 'type' : 'noderename',
-                            'nodeid' : int(node_id),
-                            'name' : str(name) }
-                for to_id in maplisteners:
-                    channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
-
-        return dict(success=True, node_id = node_id)
-    else:
-        db.rollback()
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False)
+        
+    db_rename_node(map_id, node_id, name)
+    
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            message = { 'type' : 'noderename',
+                        'nodeid' : int(node_id),
+                        'name' : str(name) }
+            for to_id in maplisteners:
+                channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
+
+    return dict(success=True)
+        
 
 @service.json
 def edit_node_valence(map_id, node_id, valence):
     '''
     Edits the node valence.
     '''
-    map_id = db.Node[node_id].id_map
-    if(auth.has_permission('update', db.Map, map_id)):
-        db.Node[node_id] = dict(valence=valence)
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                message = { 'type' : 'nodevalence',
-                            'nodeid' : int(node_id),
-                            'valence' : float(valence) }
-                for to_id in maplisteners:
-                    channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
-
-        return dict(success=True)
-    else:
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False)
+        
+    db_edit_node_valence(map_id, node_id, valence)
+    
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            message = { 'type' : 'nodevalence',
+                        'nodeid' : int(node_id),
+                        'valence' : float(valence) }
+            for to_id in maplisteners:
+                channel.send_message(to_id, gluon.contrib.simplejson.dumps(message))
+
+    return dict(success=True)
 
 @service.json
 def edit_node_dim(map_id, node_id, x, y, width, height):
     '''
     Edits node dimensions.
     '''
-    if(auth.has_permission('update', db.Map, map_id)):
-        db.Node[node_id] = dict(x = x, y = y, width = width, height = height)
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                message = { 'type' : 'nodedim',
-                            'dim' : { 
-                                        'x' : float(x),
-                                        'y' : float(y),
-                                        'width' : float(width),
-                                        'height' : float(height) 
-                                    }
-                          }
-                for to_id in maplisteners:
-                    channel.send_message(to_id, "edited node dimensions")
-
-        return dict(success=True)
-    else:
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False)
+        
+    db_edit_node_dim(map_id, node_id, x, y, width, height)
+    
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            message = { 'type' : 'nodedim',
+                        'dim' : { 
+                                    'x' : float(x),
+                                    'y' : float(y),
+                                    'width' : float(width),
+                                    'height' : float(height) 
+                                }
+                      }
+            for to_id in maplisteners:
+                channel.send_message(to_id, "edited node dimensions")
+
+    return dict(success=True)
 
 @service.json
 def create_connection(map_id, token, node_one_id, node_two_id, valence, inner_points):
     '''
     Creates a new edge in the CAM.
     '''
-    map_one_id = db.Node[node_one_id].id_map
-    map_two_id = db.Node[node_two_id].id_map
-    
-    if(auth.has_permission('update', db.Map, map_one_id) and auth.has_permission('update', db.Map, map_id)):
-        connection_id = db.Connection.insert(id_first_node=node_one_id, id_second_node=node_two_id, valence=valence, inner_points=inner_points, id_map=map_id)
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                for to_id in maplisteners:
-                    channel.send_message(to_id, "added an edge")
-        return dict(success=True, node_one=node_one_id, node_two=node_two_id, valence=valence, id=connection_id, token=token)
-    else:
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False)
+        
+    connection_id = db_create_connection(map_id, token, node_one_id, node_two_id, valence, inner_points)
+    
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            for to_id in maplisteners:
+                channel.send_message(to_id, "added an edge")
+                
+    return dict(success=True, node_one=node_one_id, node_two=node_two_id, valence=valence, id=connection_id, token=token)
 
 @service.json
 def edit_connection_valence(map_id, edge_id, valence):
     '''
     Changes the valence of a given edge.
     '''
-    map_id = db.Connection[edge_id].id_map
-    if(auth.has_permission('update', db.Map, map_id)):
-        db.Connection[edge_id] = dict(valence=valence)
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                for to_id in maplisteners:
-                    channel.send_message(to_id, "edit connection valence")
-        return dict(success=True)
-    else:
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False)
-        
-@service.json
-def edit_connection_inner_points(map_id, edge_id, inner_points):
-    '''
-    Modifies the collection of inner points for a given edge.
-    '''
-    map_id = db.Connection[edge_id].id_map
-    if (auth.has_permission('update', db.Map, map_id)):
-        db.Connection[edge_id] = dict(inner_points=inner_points)
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                for to_id in maplisteners:
-                    channel.send_message(to_id, "edit connection inner points")
-                    
-        return dict(success=True)
-    else:
-        return dict(success=False)
-        
+
+    db_edit_connection_valence(map_id, edge_id, valence)
+    
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            for to_id in maplisteners:
+                channel.send_message(to_id, "edit connection valence")
+                
+    return dict(success=True)
+
 @service.json
 def remove_connection(map_id, edge_id):
     '''
     Removes and edge from a given CAM.
     '''
-    map_id = db.Connection[edge_id].id_map
-    if(auth.has_permission('update', db.Map, map_id)):
-        del db.Connection[edge_id]
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % map_id)
-            if maplisteners is not None:
-                for to_id in maplisteners:
-                    channel.send_message(to_id, "removed connection")
-                    
-        return dict(success=True)
-    else:
+    if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False)
+        
+    db_remove_connection(map_id, edge_id)
+    
+    if settings.web2py_runtime_gae:
+        maplisteners = memcache.get('map_%s_listeners' % map_id)
+        if maplisteners is not None:
+            for to_id in maplisteners:
+                channel.send_message(to_id, "removed connection")
+                
+    return dict(success=True)
         
 @service.json
 def set_thumbnail(map_id):
@@ -432,53 +444,108 @@ def HOTCO_export():
     map_id = request.args(0)
     if(auth.has_permission('read', db.Map, map_id)):
         data = []
-        data.append('<h1>HOTCO code: </h1><br />')
+        data.append('<h1>Generated HOTCO code</h1>')
+        data.append('<pre>')
         
         group_id = db.Map[map_id].id_group
         conflict_id = db.GroupPerspective[group_id].id_conflict
         
         title = db.Conflict[conflict_id].title.replace(' ', '_')
         
-        data.append('(defun ' + title + ' () <br />')
+        data.append('(defun ' + title + ' ()\n')
 
-        data.append('(setq *problem* \'oj-hot) <br />')
-        data.append('(clear-net) <br />')
-        data.append('(hot) <br />')
+        data.append('\t(setq *problem* \'oj-hot)\n')
+        data.append('\t(clear-net)\n')
+        data.append('\t(hot)\n')
         
-        data.append('<br />')
-        data.append('(data \'( __FILL_THIS_IN )) <br />')
+        data.append('\n')
+        data.append('\t(data \'( __FILL_THIS_IN ))\n')
         
-        data.append('<br />; Propositions: <br />')
+        data.append('\n')
+        data.append('; Propositions:\n')
         for node in db(db.Node.id_map == map_id).select():
-            data.append('\t(proposition \'%s \"[%s] node is active.\") <br />' % (node.name.replace(' ', '_'), node.name ))
+            data.append('\t(proposition \'%s \"[%s] node is active.\")\n' % (node.name.replace(' ', '_'), node.name ))
         
-        data.append('<br />; Edges: <br />')
+        data.append('\n')
+        data.append('; Edges:\n')
         for row in db(db.Connection.id_map == map_id).select():
             start = db.Node[row.id_first_node].name.replace(' ', '_')
             end = db.Node[row.id_second_node].name.replace(' ', '_')
-            data.append('\t(associate %s %s %0.2f) <br />' % (start, end, row.valence * 3 ))
+            data.append('\t(associate %s %s %0.2f)\n' % (start, end, row.valence * 3 ))
             
-        data.append('<br />')
-        data.append('(make-competition) <br />')
-        data.append('<br />')
+        data.append('\n')
+        data.append('\t(make-competition)\n')
+        data.append('\n')
         
-        data.append('; HOTCO <br />')
-        data.append('(valence-unit \'valence-special \'((good 1))) <br />')
-        data.append('<br />')
+        data.append('; HOTCO\n')
+        data.append('\t(valence-unit \'valence-special \'((good 1)))\n')
+        data.append('\n')
         
-        data.append('; for HOTCO 2, note the evaluation units <br />')
-        data.append('(setf *evaluation-units* *all-units*) <br />')
+        data.append('; for HOTCO 2, note the evaluation units\n')
+        data.append('\t(setf *evaluation-units* *all-units*)\n')
             
-        data.append('<br />; Node value associations: <br />')  
+        data.append('\n')
+        data.append('; Node value associations:\n')  
         for node in db(db.Node.id_map == map_id).select():
-            data.append('\t(associate %s good %0.2f) <br />' % (node.name, node.valence * 3 ))
+            data.append('\t(associate %s good %0.2f)\n' % (node.name, node.valence * 3 ))
         
-        data.append('<br />')  
-        data.append('(eval-cohere) <br />')
-        data.append('(pls) <br />')
-        data.append('(show-valence)) <br />')
+        data.append('\n')  
+        data.append('\t(eval-cohere)\n')
+        data.append('\t(pls)\n')
+        data.append('\t(show-valence))\n')
         data.append(')')
+        
+        data.append('</pre>')
             
         return data
     else:
-        raise HTTP(400);        
+        raise HTTP(400);
+        
+"""
+DATABASE FUNCTIONS
+"""
+def db_save_origin(map_id, originX, originY):
+    db.Map[map_id] = dict(originX = originX, originY = originY)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+        
+def db_add_node(map_id, token, x, y, width, height, name):
+    node_id = db.Node.insert(id_map = map_id, valence = 0, x = x, y = y, width = width, height = height, name = name)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email, is_empty = False)
+    return node_id
+
+def db_remove_node(map_id, node_id):
+    db(db.Connection.id_first_node == node_id).delete()
+    db(db.Connection.id_second_node == node_id).delete()
+    del db.Node[node_id]
+    
+    updated_map_info = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+    if db(db.Node.id_map == map_id).count() > 0:
+        updated_map_info['is_empty'] = False
+    else:
+        updated_map_info['is_empty'] = True
+    db.Map[map_id] = updated_map_info
+
+def db_rename_node(map_id, node_id, name):
+    db.Node[node_id] = dict(name=name)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+
+def db_edit_node_valence(map_id, node_id, valence):
+    db.Node[node_id] = dict(valence=valence)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+
+def db_edit_node_dim(map_id, node_id, x, y, width, height):
+    db.Node[node_id] = dict(x = x, y = y, width = width, height = height)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+
+def db_create_connection(map_id, token, node_one_id, node_two_id, valence, inner_points):
+    connection_id = db.Connection.insert(id_first_node=node_one_id, id_second_node=node_two_id, valence=valence, inner_points=inner_points, id_map=map_id)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+    return connection_id
+
+def db_edit_connection_valence(map_id, edge_id, valence):
+    db.Connection[edge_id] = dict(valence=valence)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+
+def db_remove_connection(map_id, edge_id):
+    del db.Connection[edge_id]
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)

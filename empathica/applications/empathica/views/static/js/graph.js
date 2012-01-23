@@ -86,6 +86,8 @@ function Graph() {
     this.mouseDown = false;
     this.prevX = 0;
     this.prevY = 0;
+    this.totalX = 0;
+    this.totalY = 0;
     this.resizingDirection = "";
     this.resizedOrMoved = false;
     this.oldDim = {};
@@ -1025,6 +1027,37 @@ Graph.prototype.setSelection = function(newObject) {
     this.interactionMode = this.draggingNode;
 }
 
+/**
+    Zooms in on the CAM.
+**/
+Graph.prototype.zoomIn = function() {
+    this.zoom(0.05);
+}
+
+/**
+    Zooms out from the CAM.
+**/
+Graph.prototype.zoomOut = function() {
+    this.zoom(-0.05);
+}
+
+/**
+    Performs a zoom operation.
+**/
+Graph.prototype.zoom = function(zoomBy) {
+    this.zoomScale = Math.min(Math.max(this.zoomScale + zoomBy, this.maxZoomIn), this.maxZoomOut);
+    this.zoomScale = Math.round(this.zoomScale * Math.pow(10, 2)) / Math.pow(10, 2);
+    
+    this.hideValenceSelector();
+    this.repaint();
+    if (this.selectedObject instanceof Node || this.selectedObject instanceof Edge) {
+        this.showValenceSelector(this.selectedObject);
+    }
+}
+
+/**
+    Repaints the CAM.
+**/
 Graph.prototype.repaint = function(node) {
     if (node instanceof Node) {      
         this.ctx.save();
@@ -1041,7 +1074,13 @@ Graph.prototype.repaint = function(node) {
         return;
     }
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);    
-    this.draw();
+    
+    // TODO: remove the added height these are currently put in to prevent
+    // the canvas from showing scrollbars
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight - 1;
+    
+    this.draw(this.ctx);
 }
 
 /*

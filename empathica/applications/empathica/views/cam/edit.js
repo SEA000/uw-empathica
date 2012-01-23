@@ -6,10 +6,13 @@ $("#btnSelect").toolbarButton({ icon: 0, group: "inputMode" });
 $("#btnAddConcepts").toolbarButton({ icon: 1, group: "inputMode" });
 $("#btnAddConnections").toolbarButton({ icon: 2, group: "inputMode" });
 $("#btnSave").toolbarButton({ icon: 3, group: "inputMode" });
-$("#btnExport").toolbarButton({ icon: 4, group: "inputMode" });
-$("#btnAddComments").toolbarButton({ icon: 5, group: "inputMode" });
-$("#btnZoomFit").toolbarButton({ icon: 6, group: "inputMode" });
-$("#btnSettings").toolbarButton({ icon: 7, group: "inputMode" });
+$("#btnExport").toolbarButton({ icon: 4 });
+$("#btnExportHOTCO").toolbarButton({ icon: 5 });
+$("#btnAddComments").toolbarButton({ icon: 6 });
+$("#btnZoomIn").toolbarButton({ icon: 7 });
+$("#btnZoomOut").toolbarButton({ icon: 8 });
+$("#btnZoomFit").toolbarButton({ icon: 9 });
+$("#btnSettings").toolbarButton({ icon: 10 });
 
 $.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/nav.png')}}";
 $("#btnDone").toolbarButton({ icon: 6, label: "Done" });
@@ -156,9 +159,26 @@ $("#btnSave").click(function() {
 
 $("#btnExport").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph();
-    //setTimeout("window.location = '{{=URL('cam','download',args=[cam['id']])}}'", 500);
-    setTimeout("window.location = '{{=URL('cam','HOTCO_export',args=[cam['id']])}}'", 500);
+    g.saveGraph("{{=URL('cam','download',args=[cam['id']])}}");
+    $.blockUI({
+        message: "Saving your image. Just a moment... ",
+    });
+});
+
+$("#btnExportHOTCO").click(function() {
+    $('#btnSelect').toolbarButton('toggle');
+    g.saveGraph("{{=URL('cam','HOTCO_export',args=[cam['id']])}}");
+    $.blockUI({
+        message: "Generating code. Just a moment... ",
+    });
+});
+
+$("#btnZoomIn").click(function() {
+    g.zoomIn();
+});
+
+$("#btnZoomOut").click(function() {
+    g.zoomOut();
 });
 
 $("#btnZoomFit").click(function() {
@@ -172,7 +192,6 @@ $("#btnSettings").click(function() {
 $("#btnDone").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph("{{=URL('conflict','overview', args=[conflictid])}}");
-    
     $.blockUI({
         message: "Saving. Just a moment... ",
     });

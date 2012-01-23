@@ -92,96 +92,32 @@ Graph.prototype.squishAndSave = function(count) {
         n = this.undoStack.length;
     }
     
-    var toSave = this.undoStack.splice(0,n);
-    var hash = new CmdHash();
+    var toSave = this.undoStack.splice(0, n);
+    var cmdHash = new CmdHash();
     for (var i in toSave) {
         var cmd = toSave[i];        
         if (cmd.property == this.cmdLayout) {
             // If a layout command, then add all of its constituents to the hash
             for (id in cmd.newValue) {
-                hash.addCmd(new Command(this.cmdNode, id, this.cmdDim, cmd.oldValue[id], cmd.newValue[id]));
+                cmdHash.addCmd(new Command(this.cmdNode, id, this.cmdDim, cmd.oldValue[id], cmd.newValue[id]));
             }
-        } else if (cmd.property == this.cmdGraphMove) {
-            for (id in cmd.newValue) {
-                hash.addCmd(new Command(this.cmdNode, id, this.cmdDim, "", cmd.newValue[id]));
-            }
-            
-            for (id in this.edges) {
-                debugOut("considering edges");
-                var e = this.edges[id];
-                if (e.innerPoints && e.innerPoints.length > 0) {
-                    debugOut("added inner points to hash");
-                    hash.addCmd(new Command(this.cmdEdge, id, this.cmdInnerPoints, "", e.innerPoints));
-                }
-            }
+            cmdHash.addCmd(new Command(this.cmdNode, "", this.cmdGraphMove, "", { 'x' : g.originX, 'y': g.originY }));
         } else {
-            hash.addCmd(cmd);
+            cmdHash.addCmd(cmd);
         }
     }
     
     // Save thumbnail 
     var thumb = this.createImage(true);
     this.db_saveImage(thumb, true); 
+    
     // Save full-size
     var img = this.createImage(false);
     this.db_saveImage(img, false);
     
-    return this.saveHash(hash);
-}
-
-Graph.prototype.saveHash = function(cmdHash) {
-    var hash = cmdHash.hash;
-    // First save any node changes
-    if (! (hash[this.cmdNode] === undefined)) {
-        // Get list of node ids 
-        for (var nid in hash[this.cmdNode]) {
-            // List of properties to be updated for this node id
-            var props = hash[this.cmdNode][nid];
-            if (props[this.cmdDeleteDB] === undefined) {
-                // No node deletion in list
-                for (var p in props) {
-                    var newValue = props[p];
-                    if (p == this.cmdValence) {
-                        this.db_editNodeValence(nid, newValue);
-                    } else if (p == this.cmdText) {
-                        this.db_renameNode(nid, newValue);
-                    } else if (p == this.cmdDim) {
-                        this.db_editNodeDim(nid, newValue);
-                    } else if (p == this.cmdAddSuggested) {
-                        // Already added in graph.js - addSuggestedNode
-                        // this.db_addSuggestedNode(newValue); 
-                    }
-                }
-            } else {   // don't care about other property updates - just do a delete
-                var newValue = props[this.cmdDeleteDB];
-                this.db_deleteNode(newValue);
-            }
-            
-        }
-    }
-    
-    // Then save any edge changes
-    if (! (hash[this.cmdEdge] === undefined)) {
-        // Get list of edge ids 
-        for (var eid in hash[this.cmdEdge]) {
-            // List of properties to be updated for this edge id
-            var props = hash[this.cmdEdge][eid];
-            if (props[this.cmdDeleteDB] === undefined) {
-                // No edge deletion in list
-                for (var p in props) {
-                    var newValue = props[p];
-                    if (p == this.cmdValence) {
-                        this.db_editEdgeValence(eid, newValue);
-                    } else if (p == this.cmdInnerPoints) {
-                        this.db_editEdgeInnerPoints(g.edges[eid]);
-                    }
-                }
-            } else {   // don't care about other property updates - just do a delete
-                var newValue = props[this.cmdDeleteDB];
-                this.db_deleteEdge(newValue);
-            }
-        }
-    }
+    // Save the command hash
+    debugOut(JSON.stringify(cmdHash.hash));
+    this.db_saveHash(cmdHash.hash);
 }
 
 /**
@@ -201,6 +137,9 @@ Graph.prototype.undo = function() {
             node.text = cmd.oldValue;
         } else if (cmd.property == this.cmdDim) {
             node.dim = cmd.oldValue;
+            if (g.selectedObject.id == cmd.objId) {
+                g.showValenceSelector(g.selectedObject);
+            }
         } else if (cmd.property == this.cmdValence) {
             node.valence = cmd.oldValue;
         } else if (cmd.property == this.cmdNodePlaceholder) {
@@ -223,6 +162,9 @@ Graph.prototype.undo = function() {
                 node = this.nodes[i];
                 node.dim = cmd.oldValue[i];
             }
+        }  else if (cmd.property == this.cmdGraphMove) {
+            this.originX = cmd.oldValue['x'];
+            this.originY = cmd.oldValue['y'];
         }
     } else if (cmd.objType == this.cmdEdge) {
         var edge = this.edges[cmd.objId];

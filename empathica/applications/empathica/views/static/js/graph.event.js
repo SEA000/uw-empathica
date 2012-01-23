@@ -17,7 +17,9 @@ var KEY = {
     SAVE:           83, // S
     CTRL:           17,
     SHIFT:          16,
-    ALT:            18
+    ALT:            18,
+    ZOOM_IN:        107,
+    ZOOM_OUT:       109
 };
 
 /**
@@ -62,13 +64,26 @@ Graph.prototype.initEventListeners = function() {
         if (c == KEY.BACKSPACE && g.interactionMode != g.renamingNode) { 
             return false;
         }
-        if (e.ctrlKey && c == KEY.SAVE) {
-            g.saveGraph();
-            $.blockUI({
-                message: "Saving. Just a moment... ",
-            });
-            return false;
+        
+        debugOut(c);
+        if (e.ctrlKey) {
+            if (c == KEY.SAVE) {
+                g.saveGraph();
+                $.blockUI({
+                    message: "Saving. Just a moment... ",
+                });
+                return false;
+            } else if (c == KEY.ZOOM_IN) {
+                debugOut('Hello');
+                g.zoomIn();
+                return false;
+            } else if (c == KEY.ZOOM_OUT) {
+                g.zoomOut();
+                return false;
+            }
         }
+        
+        return true;
     }
     
     document.oncontextmenu = function() {
@@ -224,6 +239,7 @@ Graph.prototype.eventMouseMove = function(e) {
             g.possibleDeselect = {};
             var xOffset = (mx - g.prevX) / g.zoomScale;
             var yOffset = (my - g.prevY) / g.zoomScale;
+            
             if (g.interactionMode == g.renamingNode) {
                 // ignore movement on the graph while renaming node
                 return;
@@ -303,64 +319,32 @@ Graph.prototype.eventMouseMove = function(e) {
                 g.positionSlider(g.selectedObject);
                 
             } else if (g.interactionMode == g.draggingGraph) {
-            
-                var xOffset = mx - g.prevX;
-                var yOffset = my - g.prevY;            
-            
-                for (i in g.nodes) {
-                    var node = g.nodes[i];
-                    node.dim.x += xOffset;
-                    node.dim.y += yOffset;
-                }
-                
-                // Update edge midpoints
-                for (var e in g.edges) {
-                    var edge = g.edges[e];
-                    if (edge.innerPoints) {
-                        for (var p = 0; p < edge.innerPoints.length; p++) {
-                            edge.innerPoints[p].x += xOffset;
-                            edge.innerPoints[p].y += yOffset;
-                        }
-                    }
-                }
-                
-                // Recompute graph origin
-                var nodeCount = 0;
-                g.originX = 0;
-                g.originY = 0;
-                for (var i in g.nodes) {                    
-                    var n = g.nodes[i];
-                    g.originX += n.dim.x;
-                    g.originY += n.dim.y;
-                    nodeCount++;
-                }
-                g.originX /= nodeCount;
-                g.originY /= nodeCount;                
+                g.originX += mx - g.prevX;
+                g.originY += my - g.prevY;
                 
                 if (Math.abs(xOffset) > 0 || Math.abs(yOffset) > 0) {
                     g.resizedOrMoved = true;
                 }                
             } else if (g.interactionMode == g.multiSelect) {
                 for (var i in g.selection) {
-                    if (g.selection[i] instanceof Node) {
-                        g.selection[i].dim.x += xOffset;
-                        g.selection[i].dim.y += yOffset;
-                    } else if (g.selection[i] instanceof Edge) {
-                        if (g.selection[i].innerPoints) {
-                            for (var p = 0; p < edge.innerPoints.length; p++) {
-                                g.selection[i].innerPoints[p].x += xOffset;
-                                g.selection[i].innerPoints[p].y += yOffset;
-                            }
-                        }
+                    if (! (g.selection[i] instanceof Node)) {
+                        continue;
                     }
+                    g.selection[i].dim.x += xOffset;
+                    g.selection[i].dim.y += yOffset;
                 }
                 
                 if (Math.abs(xOffset) > 0 || Math.abs(yOffset) > 0) {
                     g.resizedOrMoved = true;
                 }
             }
+            
+            g.totalX += mx - g.prevX;
+            g.totalY += my - g.prevY;
+            
             g.prevX = mx;
             g.prevY = my;
+            
             g.repaint();
         } else {
             g.mouseOverHandler(e);
@@ -448,13 +432,10 @@ Graph.prototype.eventMouseUp = function(e) {
                     g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdDim, g.oldDim, g.selectedObject.dim));
                 }
             } else {
-                // Moved entire graph, so save all nodes
-                var nodeList = {};
-                for (var i in g.nodes) {                    
-                    var n = g.nodes[i];
-                    nodeList[n.id] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
-                }
-                g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, "", nodeList));
+                var oldOrigin = { 'x' : g.originX - g.totalX, 'y': g.originY - g.totalY };
+                var newOrigin = { 'x' : g.originX, 'y': g.originY };
+                
+                g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, oldOrigin, newOrigin));
             }
         } else {
             if (g.interactionMode == g.multiSelect) {
@@ -511,6 +492,8 @@ Graph.prototype.eventMouseDown = function(e) {
         g.mouseDown = true;
         g.prevX = mx;
         g.prevY = my;
+        g.totalX = 0;
+        g.totalY = 0;
         
         // Node selection logic
         var oldNode = g.selectedObject;
@@ -669,11 +652,6 @@ Graph.prototype.eventMouseDoubleClick = function(e) {
     of a CAM. 
 **/
 Graph.prototype.eventMouseWheel = function (e) {
-    //return true;
-
-    var canvas = document.getElementById(g.canvasName);
-    var ctx = canvas.getContext("2d");
-    
     var coords = g.getCursorPosition(e);
     var mx = coords[0];
     var my = coords[1];
@@ -690,16 +668,7 @@ Graph.prototype.eventMouseWheel = function (e) {
     var wheel = move;//n or -n
     var zoom = 1 + wheel/2;
     
-    g.zoomScale = Math.min(Math.max(g.zoomScale + (1 - zoom) / 5, g.maxZoomIn), g.maxZoomOut);
-    g.zoomScale = Math.round(g.zoomScale * Math.pow(10, 2)) / Math.pow(10, 2);
-    
-    debugOut('g.zoomScale ' + g.zoomScale);
-    
-    g.hideValenceSelector();
-    g.repaint();
-    if (g.selectedObject instanceof Node || g.selectedObject instanceof Edge) {
-        g.showValenceSelector(g.selectedObject);
-    }
+    g.zoom((1 - zoom) / 5);
 }
 
 /**

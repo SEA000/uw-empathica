@@ -8,24 +8,9 @@
 /**
     Main function called to draw the nodes and edges
 **/
-Graph.prototype.draw = function() {
-    var canvas = this.canvas;
-    var ctx = this.ctx;
-    
-    // TODO: remove the added height these are currently put in to prevent
-    // the canvas from showing scrollbars
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 1;
-
+Graph.prototype.draw = function(ctx) {
     this.drawEdges(ctx);
-    
     this.drawNodes(ctx);
-    
-    if (this.outlineCanvas) {
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = this.canvasOutlineColour;
-        ctx.strokeRect(0,0,canvas.width, canvas.height);
-    }
 }
 
 /**
@@ -328,22 +313,52 @@ Graph.prototype.drawText = function(ctx, node) {
 **/
 Graph.prototype.createImage = function(thumb) {
     var canvas = this.canvas;
-    var ctx = this.ctx;
-    var img = new Image();
     var canvasCopy = document.createElement("canvas");
+    var contextCopy = canvasCopy.getContext("2d");
+    
+    var bounds = this.getBounds();
+    var sourceX = Math.max(0, bounds.left-5);
+    var sourceY = Math.max(0, bounds.top-5);
+    var sourceWidth = bounds.right - bounds.left + 10;
+    var sourceHeight = bounds.bottom - bounds.top + 10;
     
     if (thumb) {
-        canvasCopy.width = 407;
-        canvasCopy.height = 260;
-        var contextCopy = canvasCopy.getContext("2d");
-        contextCopy.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, canvasCopy.width, canvasCopy.height);
+        var thumbX = 407;
+        var thumbY = 260;
+    
+        canvasCopy.width = thumbX;
+        canvasCopy.height = thumbY;
+        
+        var offsetX = sourceWidth - thumbX * Math.floor(sourceWidth / thumbX);
+        var offsetY = sourceHeight - thumbY * Math.floor(sourceHeight / thumbY);
+        
+        sourceX = Math.round(sourceX - offsetX / 2);
+        sourceWidth = Math.round(sourceWidth + offsetX);
+        
+        sourceY = Math.round(sourceY - offsetY / 2);
+        sourceHeight = Math.round(sourceHeight + offsetY);
+        
+        contextCopy.drawImage(canvas, Math.max(sourceX, 0), Math.max(sourceY, 0), Math.min(sourceWidth, canvas.width), Math.min(sourceHeight, canvas.height), 0, 0, canvasCopy.width, canvasCopy.height);
     } else { 
-        var bounds = this.getBounds();
-        canvasCopy.width = Math.min(bounds.right - bounds.left + 10, canvas.width);
-        canvasCopy.height = Math.min(bounds.bottom - bounds.top + 10, canvas.height);
-        var contextCopy = canvasCopy.getContext("2d");
-        contextCopy.drawImage(canvas, Math.max(0, bounds.left-5), Math.max(0, bounds.top-5), canvasCopy.width, canvasCopy.height, 0, 0, canvasCopy.width, canvasCopy.height);
+        // This is the target for the image
+        canvasCopy.width = sourceWidth;
+        canvasCopy.height = sourceHeight;      
+        
+        sourceX = Math.abs(bounds.left);
+        sourceY = Math.abs(bounds.top);
+        
+        // This is where we will draw the unconstrained map
+        var tempCanvas = document.createElement("canvas");
+        tempCanvas.width = sourceX + sourceWidth;
+        tempCanvas.height = sourceY + sourceHeight;
+        
+        // Draw the CAM
+        this.draw(tempCanvas.getContext("2d"));
+        
+        // Copy to the copy canvas
+        contextCopy.drawImage(tempCanvas, sourceX, sourceY, tempCanvas.width - sourceX, tempCanvas.height - sourceY, 0, 0, canvasCopy.width, canvasCopy.height);
     }
+
     return canvasCopy.toDataURL("image/png");
 }
 
@@ -363,10 +378,11 @@ Graph.prototype.getBounds = function() {
         return bounds;
     }
     
-    bounds.left = this.nodes[first].dim.x - this.nodes[first].dim.width/2;
-    bounds.top = this.nodes[first].dim.y - this.nodes[first].dim.height/2;
-    bounds.right = this.nodes[first].dim.x + this.nodes[first].dim.width/2;
-    bounds.bottom = this.nodes[first].dim.y + this.nodes[first].dim.height/2;
+    var dim = this.nodes[first].dim;
+    bounds.left = dim.x - dim.width/2;
+    bounds.top = dim.y - dim.height/2;
+    bounds.right = dim.x + dim.width/2;
+    bounds.bottom = dim.y + dim.height/2;
     
     for (var i in this.nodes) {
         var n = this.nodes[i];
@@ -387,7 +403,8 @@ Graph.prototype.getBounds = function() {
     for (var i in this.edges) {
         var e = this.edges[i];
         if (e.innerPoints && e.innerPoints.length > 0) {
-            for (var p in e.innerPoints) {
+            for (var pid in e.innerPoints) {
+                var p = e.innerPoints[pid];
                 if (p.x < bounds.left) {
                     bounds.left = p.x;
                 }
@@ -414,33 +431,19 @@ Graph.prototype.getBounds = function() {
 /**
     A utility function for proper scaling of shapes and edges.
 **/
-Graph.prototype.scale = function(x, oX)
-{
-    return (x - oX) * this.zoomScale + oX;
+Graph.prototype.scaleX = function(x) {
+    return x * this.zoomScale + this.originX;
 }
 
-Graph.prototype.scaleX = function(x)
-{
-    return this.scale(x, this.originX);
+Graph.prototype.scaleY = function(y) {
+    return y * this.zoomScale + this.originY;
 }
 
-Graph.prototype.scaleY = function(y)
-{
-    return this.scale(y, this.originY);
+Graph.prototype.unscaleX = function(x) {
+    return x / this.zoomScale - this.originX;
 }
 
-Graph.prototype.unscale = function(x, oX)
-{
-    return (x - oX) / this.zoomScale + oX;
-}
-
-Graph.prototype.unscaleX = function(x)
-{
-    return this.unscale(x, this.originX);
-}
-
-Graph.prototype.unscaleY = function(y)
-{
-    return this.unscale(y, this.originY);
+Graph.prototype.unscaleY = function(y) {
+    return y / this.zoomScale - this.originY;
 }
 
