@@ -21,7 +21,7 @@ Graph.prototype.db_saveHash = function(hash) {
     var url = "{{=URL('call/json/save_hash')}}";
     
     this.incrementPendingSaves();
-    $.getJSON(
+    $.post(
         url,
         {   
             map_id:     g.mapID, 
@@ -50,7 +50,7 @@ Graph.prototype.db_addNode = function(node) {
     var url = "{{=URL('call/json/add_node')}}";
     
     this.incrementPendingSaves();
-    $.getJSON(
+    $.post(
         url,
         {   
             map_id:     g.mapID, 
@@ -85,7 +85,7 @@ Graph.prototype.db_addEdge = function(edge) {
     var url = "{{=URL('call/json/create_connection')}}";
     
     this.incrementPendingSaves();
-    $.getJSON(
+    $.post(
         url,
         {   
             map_id:         g.mapID, 
@@ -120,7 +120,7 @@ Graph.prototype.db_deleteNode = function(node) {
     var url = "{{=URL('call/json/remove_node')}}";
     
     this.incrementPendingSaves();
-    $.getJSON(
+    $.post(
         url,
         {   
             map_id:         g.mapID,
@@ -150,7 +150,7 @@ Graph.prototype.db_deleteEdge = function(edge) {
     var url = "{{=URL('call/json/remove_connection')}}";
     
     this.incrementPendingSaves();
-    $.getJSON(
+    $.post(
         url,
         {   
             map_id:         g.mapID, 
@@ -180,11 +180,11 @@ Graph.prototype.db_getGraphData = function() {
         {   
             map_id:         g.mapID
         }, function(data) {
-        
-            debugOut(data);
+            //debugOut(data);
             if (g.db_validate_response(data)) {
             
                 // Create nodes
+                var nodeCount = 0;
                 for (var id in data.mapdata.nodes) {
                     var record = data.mapdata.nodes[id];
                     
@@ -197,6 +197,7 @@ Graph.prototype.db_getGraphData = function() {
                     // Insert into the data structures
                     g.nodes[id] = n;
                     g.drawOrder.push(id);
+                    nodeCount += 1;
                 }
                 
                 // Create edges
@@ -231,19 +232,16 @@ Graph.prototype.db_getGraphData = function() {
                     g.setTheme(THEMES.DEFAULT);
                 }
                 
-                debugOut(data.mapdata.origin);
-                
                 g.originX = data.mapdata.origin['x'];
                 g.originY = data.mapdata.origin['y'];
                 
                 // Make sure the origin is not null
-                if (g.originX == null) {
-                    g.originX = 0;
+                if (g.originX == null || g.originY == null || nodeCount == 0) {
+                    g.originX = g.canvas.width / 2;
+                    g.originY = g.canvas.height / 2;
+                    g.db_saveOrigin();
                 }
-                if (g.originY == null) {
-                    g.originY = 0;
-                }
-                
+
                 g.repaint();
             }
             g.decrementPendingSaves();
@@ -255,7 +253,7 @@ Graph.prototype.db_getGraphData = function() {
 }
 
 // Sets the graph data based on the input nodes and edges
-Graph.prototype.db_setGraphData = function(nodes, edges)
+Graph.prototype.db_setGraphData = function(nodes, edges, origin)
 {
     var url = "{{=URL('call/json/set_graph_data')}}";
     
@@ -265,9 +263,9 @@ Graph.prototype.db_setGraphData = function(nodes, edges)
         {   
             map_id:         g.mapID, 
             nodes:          JSON.stringify(nodes),
-            edges:          JSON.stringify(edges)
+            edges:          JSON.stringify(edges),
+            origin:         JSON.stringify(origin)
         }, function(data) {
-            debugOut(data);
             if (g.db_validate_response(data)) {
                 for (var token in data.nodes) {
                     g.update_node_id(token, data.nodes[token]);
@@ -282,6 +280,31 @@ Graph.prototype.db_setGraphData = function(nodes, edges)
         }
     ).error(function(data) {
         alert('Oops. Empathica failed to import your CAM data. Please, try again.');
+        g.decrementPendingSaves();
+    });
+}
+
+/**
+    Save current origin to the DB
+**/
+Graph.prototype.db_saveOrigin = function() {
+    
+    var url = "{{=URL('call/json/save_origin')}}";
+    
+    this.incrementPendingSaves();
+    $.post(
+        url,
+        {   
+            map_id:         g.mapID, 
+            origin:         JSON.stringify({'x': g.originX, 'y': g.originY})
+        }, function(data) {
+            if (g.db_validate_response(data)) {
+                debugOut("Save origin success!");
+            }
+            g.decrementPendingSaves();
+        }
+    ).error(function(data) {
+        alert('Oops. Empathica failed to save the current CAM origin.');
         g.decrementPendingSaves();
     });
 }
@@ -327,7 +350,7 @@ Graph.prototype.db_saveTheme = function() {
     var url = "{{=URL('call/json/set_theme')}}";
     
     this.incrementPendingSaves();
-    $.getJSON(
+    $.post(
         url,
         {   
             map_id:         g.mapID, 
@@ -375,6 +398,7 @@ Graph.prototype.db_validate_response = function(data) {
             return true;
         } else {
             alert('You are not authorized to make modifications to this CAM.');
+            return false;
         }
     }
     debugOut('DB returned unexpected result!');

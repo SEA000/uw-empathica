@@ -21,7 +21,6 @@
     <head>
         <title>Empathica{{=' | '+response.title if response.title else ''}}</title>
         <link rel="shortcut icon" href="{{=URL('static','favicon.ico')}}" />
-        <!--<link rel="apple-touch-icon" href="{{=URL('static','favicon.png')}}" />-->
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
         <meta name="keywords" content="{{=response.keywords}}" />
         <meta name="description" content="{{=response.description}}" />
@@ -36,11 +35,7 @@
         <link rel="stylesheet" href="{{=URL('static','font/import.css')}}" />
         <link rel="stylesheet" href="{{=URL('static','css/empathica.base.css')}}" />
         {{ block css }}{{ end #css }}
-        {{ if DEBUG: }}
         <script>{{ include 'static/js/jquery.min.js' }}</script>
-        {{ else: }}
-        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
-        {{ pass }}
         {{ if REDLINES: }}
         <style type="text/css">
             body * { outline: 1px dotted red; }
@@ -63,7 +58,7 @@
                 </div>
                 <div class="center">
                     {{ block header-center }}
-                        <a id="header-logo" tabindex=-1></a><!--href="{{=URL('default','index')}}"--> 
+                        <a id="header-logo" tabindex=-1></a>
                     {{ end #header-center }}
                 </div>
                 <div class="right">
@@ -127,7 +122,6 @@
         <script src="{{=URL('static', 'js/jquery.equalHeights.js')}}"></script>
         <script src="{{=URL('static', 'js/jquery.hyphenate.js')}}"></script>
         <script src="{{=URL('static', 'js/jquery.hoverIntent.min.js')}}"></script>
-        <!--<script src="{{=URL('static', 'js/jquery.validate.pack.js')}}"></script>-->
         <script src="{{=URL('static', 'js/jquery.timeago.js')}}"></script>
         <script src="{{=URL('static', 'js/jquery.toolbarButton.js')}}"></script>
         {{ include 'web2py_ajax.html' }}

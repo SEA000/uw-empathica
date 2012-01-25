@@ -24,6 +24,7 @@
     <script>{{ include 'static/js/graph.event.js' }}</script>
     <script>{{ include 'static/js/graph.undo.js' }}</script>
     <script>{{ include 'static/js/graph.layout.js' }}</script>
+    <script>{{ include 'static/js/shortcut.js' }}</script>
 {{ end #js }}
 
 {{ block onReady }}
@@ -40,15 +41,15 @@
         <li id="header-logo"></li>
         <li class="divider"></li>
         <li id="btnSelect" class="tooltip" title="Selection Tool"></li>
-        <li id="btnAddConcepts" class="tooltip" title="Add Concepts (A)"></li>
-        <li id="btnAddConnections" class="tooltip" title="Add Connections (E)"></li>
+        <li id="btnAddConcepts" class="tooltip" title="Add Concepts (Ctrl + A)"></li>
+        <li id="btnAddConnections" class="tooltip" title="Add Connections (Ctrl + E)"></li>
         <li id="btnSave" class="tooltip" title="Save the CAM (Ctrl + S)"></li>
         <li id="btnExport" class="tooltip" title="Export to PNG"></li>
         <li id="btnExportHOTCO" class="tooltip" title="Export to HOTCO"></li>
         <li id="btnAddComments" class="tooltip hidden" title="Add Comments"></li>
         <li class="divider"></li>
-        <li id="btnZoomIn" class="tooltip" title="Zoom In (Ctrl + Num +)"></li>
-        <li id="btnZoomOut" class="tooltip" title="Zoom Out (Ctrl + Num -)"></li>
+        <li id="btnZoomIn" class="tooltip" title="Zoom In (Ctrl + Up)"></li>
+        <li id="btnZoomOut" class="tooltip" title="Zoom Out (Ctrl + Down)"></li>
         <li id="btnZoomFit" class="tooltip" title="Center on Screen"></li>
         <li id="btnSettings" class="tooltip" title="Settings"></li>
     </ul>

@@ -80,7 +80,7 @@ function Graph() {
     this.strongThreshold = 0.8;  // if Math.abs(node.valence) exceeds this threshold make the text bold
     this.textWidthInNode = 0.6;  // How much of the width of a node can be occupied by text (on auto-resize)
     this.textHeightInNode = 0.8; // How much of the height of a node can be occupied by text (on auto-resize)
-    this.nodeWidthIncrease = 1.8; // Interval by which a node gets wider on auto-resize
+    this.nodeWidthIncrease = 1.2; // Interval by which a node gets wider on auto-resize
     
     // Mouse event flags
     this.mouseDown = false;
@@ -139,9 +139,8 @@ function Graph() {
     this.drawOrder = new Array();
     this.edges = {};
     
-    // Undo / redo
+    // Undo
     this.undoStack = new Array();
-    this.redoStack = new Array();
     this.undoStackSize = 30;
     
     // Types
@@ -383,7 +382,7 @@ Graph.prototype.addEdge = function( id1, id2, v, inPts) {
 */
 Graph.prototype.setNodeText = function(id, newText) {
     var node = this.nodes[id];
-    if (typeof(node) == "undefined") {
+    if (node === undefined) {
         return this.NODEID_INVALID;
     }
     
@@ -395,7 +394,7 @@ Graph.prototype.setNodeText = function(id, newText) {
 
 Graph.prototype.setNodeValence = function(id, newValence) {
     var node = this.nodes[id];
-    if (typeof(node) == "undefined") {
+    if (node === undefined) {
         return NODEID_INVALID;
     }
     
@@ -418,14 +417,18 @@ Graph.prototype.deleteNode = function(id) {
     var deletingNewNode = node.newNode;
     
     if (this.selectedObject.id == node.id) {
-        this.selectedObject = new Object();
+        this.selectedObject = {};
     }
     
-    // Copy
+    var oldValue = {};
+    
+    // Copy    
     var dead = new Node(node.id, node.text, node.valence);
-    dead.selected = node.selected;
     dead.newNode = node.newNode;
     dead.dim = { 'x': node.dim.x, 'y': node.dim.y, 'width': node.dim.width, 'height': node.dim.height };
+    
+    oldValue['dead'] = dead;
+    oldValue['edges'] = {};
     
     // Remove the node from the drawOrder queue
     for(var i = 0; i < this.drawOrder.length; i++) {
@@ -444,7 +447,20 @@ Graph.prototype.deleteNode = function(id) {
     for (var i in this.edges) {
         var edge = this.edges[i];
         if (edge.from == id || edge.to == id) {
-            delete this.edges[edge.id];
+        
+            // Update the selected object
+            if (edge.selected) {
+                this.selectedObject = {};
+            }
+            
+            // Save the edge
+            var deadEdge = new Edge(edge.id, edge.from, edge.to, edge.valence);
+            deadEdge.selected = edge.selected;
+            deadEdge.newEdge = edge.newEdge;            
+            oldValue['edges'][i] = deadEdge;
+            
+            // Remove from the data struct
+            delete this.edges[i];
         }
     }
     
@@ -453,7 +469,7 @@ Graph.prototype.deleteNode = function(id) {
         // instead - delete everything from the undo stack containing this node's guid - it has not been committed yet
         this.removeFromUndoById(id);
     } else {
-        this.pushToUndo(new Command(this.cmdNode, id, this.cmdDeleteDB, "", dead));
+        this.pushToUndo(new Command(this.cmdNode, id, this.cmdDeleteDB, oldValue, ""));
     }
     
     this.repaint();
@@ -497,7 +513,7 @@ Graph.prototype.deleteEdge = function(id) {
     if (deletingNewEdge) {
         this.removeFromUndoById(id);
     } else {
-        this.pushToUndo(new Command(this.cmdEdge, id, this.cmdDeleteDB, "", dead));
+        this.pushToUndo(new Command(this.cmdEdge, id, this.cmdDeleteDB, dead, ""));
     }
     
     this.repaint();
@@ -525,13 +541,13 @@ Graph.prototype.deleteSelection = function () {
 }
 
 // Reposition a node in the graph
-Graph.prototype.setPosition = function(n, x, y) {
-    var oldDim = n.dim;
+Graph.prototype.setPosition = function(n, x, y) {    
     if (x && y) {
+        var oldDim = n.dim;
         n.dim.x = g.unscaleX(x);
         n.dim.y = g.unscaleY(y);
-    }
-    this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdDim, oldDim, n.dim));
+        this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdDim, oldDim, n.dim));
+    }    
 }
 
 // Set the size of a node based on the text it contains
@@ -544,12 +560,6 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
         return;
     }
     
-    var oldDim = node.dim;
-    
-    // reset node width and height
-    node.dim.width = 100;
-    node.dim.height = 60;
-    
     var scaledBaseTextWidth = this.textWidthInNode * this.zoomScale; 
     var scaledBaseTextHeight = this.textHeightInNode * this.zoomScale; 
     
@@ -561,27 +571,31 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
         return;
     }
     
+    // reset node width and height
+    var oldDim = node.dim;
+    node.dim.width = 100;
+    node.dim.height = 60;
+    
     // continue resizing node until it fits
     var lineArray = new Array();
     
     // increase width first, then height
     var increaseWidth = true;
-    var maxHeight = 0;
     var count = 0;
     
-    var fits = false;
-    while (!fits && count < 10) {
-        count++;
+    while (count < 30) {        
         lineArray = this.getTextLines(ctx, node);
         
         var textWidth = this.lengthOfLongestLine(ctx, lineArray);
+        var textHeight = lineArray.length * parseInt(this.theme.nodeFontLineHeight);
         
         // getTextLines fits text to width, so now check height
         // the total height (in pixels) of the node that is allowed to be occupied by text
-        maxHeight = node.dim.height * scaledBaseTextHeight;
+        var maxHeight = node.dim.height * scaledBaseTextHeight;
+        var maxWidth = node.dim.width * scaledBaseTextWidth;
         
         // Break if line fits height AND width wise
-        if (maxHeight >= lineArray.length * parseInt(this.theme.nodeFontLineHeight) && textWidth < node.dim.width * scaledBaseTextWidth) {
+        if (maxHeight >= textHeight && maxWidth >= textWidth) {
             break;
         }
         
@@ -591,12 +605,13 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
             node.dim.width *= this.nodeWidthIncrease;
         } else {
             // increase height and see if it now fits length-wise
-            if (maxHeight < lineArray.length * parseInt(this.theme.nodeFontLineHeight)) {
+            if (maxHeight < textHeight) {
                 node.dim.height += parseInt(this.theme.nodeFontLineHeight);
             }
         }
         
         increaseWidth = !increaseWidth;
+        count += 1;
     }
     
     if (push) {
@@ -608,7 +623,7 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
 
 Graph.prototype.lengthOfLongestLine = function(ctx, lineArray) {
     var maxlen = 0;
-    for (line in lineArray) {
+    for (var line in lineArray) {
         var len = ctx.measureText(lineArray[line]).width;
         if (len > maxlen) {
             maxlen = len;
@@ -633,18 +648,27 @@ Graph.prototype.getTextLines = function(ctx, node) {
     
     ctx.fontStyle = style;
     
-    var length = node.dim.width * this.textWidthInNode;
+    var length = node.dim.width * this.zoomScale * this.textWidthInNode;
     var lineWidth = 0;
     for (var i = 0; i < words.length; i++) {
-        var word = words[i];
-        lineWidth = ctx.measureText(lineSoFar + word).width;
+        var word = words[i];        
+        lineWidth = ctx.measureText(lineSoFar + " " + word).width;
+        
         if (lineWidth < length) {
-            lineSoFar += (" " + word);
+            if (lineSoFar != "")
+            {
+                lineSoFar += " ";
+            }
+            lineSoFar += word;
         } else {
-            arr.push(lineSoFar);
+            // Skip empty lines
+            if (lineSoFar != "") {
+                arr.push(lineSoFar);
+            }
             lineSoFar = word;
         }
-        if (i == words.length-1) {
+        
+        if (i == words.length - 1) {
             arr.push(lineSoFar);
             break;
         }
@@ -696,6 +720,12 @@ Graph.prototype.getEdgeUnderPointer = function(mx, my) {
         var edge = this.edges[i];
         var to = this.nodes[edge.to];
         var from = this.nodes[edge.from];
+        
+        // Make sure the source and destination are valid
+        if (from === undefined || to === undefined){
+            continue;
+        }
+        
         var pts = edge.innerPoints;
         var padding = this.edgePadding * Math.min(1, this.zoomScale);
         
@@ -1080,7 +1110,7 @@ Graph.prototype.repaint = function(node) {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight - 1;
     
-    this.draw(this.ctx);
+    this.draw(this.ctx, this.originX, this.originY);
 }
 
 /*
@@ -1129,6 +1159,9 @@ Graph.prototype.generateGraphFromString = function(saveText) {
         this.addEdge(nodeMap[edge.from], nodeMap[edge.to], edge.valence, edge.innerPoints);
     }
     
+    // Compute the new origin
+    this.centreGraph();
+    
     // Push nodes and edges to DB
-    g.db_setGraphData(this.nodes, this.edges);
+    g.db_setGraphData(this.nodes, this.edges, { 'x': this.originX, 'y': this.originY });
 }

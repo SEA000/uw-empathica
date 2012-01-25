@@ -5,30 +5,10 @@
     Last Updated:   2011-04-17
  **/ 
 
-// Keyboard keyCodes
-var KEY = {
-    ENTER:          13,
-    ESCAPE:         27,
-    DELETE:         46,
-    BACKSPACE:      8,
-    UNDO:           90, // Z
-    ADD_NODES:      65, // A
-    ADD_EDGES:      69, // E
-    SAVE:           83, // S
-    CTRL:           17,
-    SHIFT:          16,
-    ALT:            18,
-    ZOOM_IN:        107,
-    ZOOM_OUT:       109
-};
-
 /**
     Initialize event listeners and some other handlers
 **/
 Graph.prototype.initEventListeners = function() {
-    // HTML5 canvas elements
-    var canvas = document.getElementById(this.canvasName);
-    var ctx = canvas.getContext("2d");
     
     {{ if settings.web2py_runtime_gae: }}
     // Set up the google app engine socket
@@ -41,170 +21,55 @@ Graph.prototype.initEventListeners = function() {
     {{ pass }}
     
     // Add the canvas and context to the graph's properties
-    this.canvas = canvas;
-    this.ctx = ctx;
+    this.canvas.addEventListener("mousedown", this.eventMouseDown, false);
+    this.canvas.addEventListener("mouseup", this.eventMouseUp, false);
+    this.canvas.addEventListener("mousemove", this.eventMouseMove, false);
+    this.canvas.addEventListener("dblclick", this.eventMouseDoubleClick, false);
+    this.canvas.addEventListener("mousewheel", this.eventMouseWheel, false); 
+    this.canvas.addEventListener("DOMMouseScroll", this.eventMouseWheel, false); 
     
-    canvas.addEventListener("mousedown", this.eventMouseDown, false);
-    canvas.addEventListener("mouseup", this.eventMouseUp, false);
-    canvas.addEventListener("mousemove", this.eventMouseMove, false);
-    canvas.addEventListener("dblclick", this.eventMouseDoubleClick, false);
-    canvas.addEventListener("mousewheel", this.eventMouseWheel, false); 
-    canvas.addEventListener("DOMMouseScroll", this.eventMouseWheel, false); 
-    window.addEventListener("keydown", this.eventKeyDown, false); 
+    // Register shortcuts 
+    shortcut.add("Ctrl+S", function() {
+        g.saveGraph();
+        $.blockUI({
+            message: "Saving. Just a moment... ",
+        });
+    });
     
-    var textEditor = document.getElementById('textEditInput');
-    textEditor.onkeydown = this.nodeRenameHandler;
-    textEditor.onenter = function() {return false;};
-    document.onkeypress = stopRKey;     // Disable submittal of forms on enter.
+    shortcut.add("Ctrl+UP", function() {
+        g.zoomIn();
+    });
     
-    // Disable 
-    document.onkeydown = function (e) { 
-        e = e || window.event; 
-        var c = e.keyCode||e.which; 
-        if (c == KEY.BACKSPACE && g.interactionMode != g.renamingNode) { 
-            return false;
-        }
-        
-        debugOut(c);
-        if (e.ctrlKey) {
-            if (c == KEY.SAVE) {
-                g.saveGraph();
-                $.blockUI({
-                    message: "Saving. Just a moment... ",
-                });
-                return false;
-            } else if (c == KEY.ZOOM_IN) {
-                debugOut('Hello');
-                g.zoomIn();
-                return false;
-            } else if (c == KEY.ZOOM_OUT) {
-                g.zoomOut();
-                return false;
-            }
-        }
-        
-        return true;
-    }
+    shortcut.add("Ctrl+DOWN", function() {
+        g.zoomOut();
+    });
     
-    document.oncontextmenu = function() {
-        return false;
-    };
-}
-
-/**
-    Handle key presses
-**/
-Graph.prototype.eventKeyDown = function(e) {
-    e = e || window.event;
-    var code = e.keyCode || e.which;
-    
-    // Uncomment this to debug addition of keys etc. 
-    //debugOut(code);
-    
-    if (e.ctrlKey && KEY.UNDO == code) {   // Ctrl+ Z
+    shortcut.add("Ctrl+Z", function() {
         g.undo();
-        return;
-    } else if (e.ctrlKey && KEY.SAVE == code) {
-        // saveGraph called by the document's keydown handler, set in initEventListeners
-        return;
-    }
+    });
     
-    if (g.interactionMode != g.renamingNode) {
-        if ( KEY.BACKSPACE == code ) {
-            return;
-        }
-        
-        if ( KEY.ADD_NODES == code ) {         
-            $('#btnAddConcepts').toolbarButton('toggle');
-            return;
-        } else if (KEY.ADD_EDGES == code ) {      
-            $('#btnAddConnections').toolbarButton('toggle');
-            return;
-        } 
-    }
-
-    if (g.selectedObject instanceof Node) {
-        if (KEY.DELETE == code && g.interactionMode != g.renamingNode) {
-            g.deleteNode(g.selectedObject.id);
-            g.interactionMode = g.draggingGraph;
-            g.hideValenceSelector();
-        } else if (KEY.ESCAPE == code) {        
-            $('#btnSelect').toolbarButton('toggle');
-        } else if (KEY.ENTER == code || KEY.CTRL == code || KEY.SHIFT == code || KEY.ALT == code) {
-            // NO-OP
-        } else if (g.interactionMode != g.renamingNode) {
-            g.interactionMode = g.renamingNode;
-            g.showTextEditor(g.selectedObject);
-        } 
-    } else if (g.selectedObject instanceof Edge) {
-        if (KEY.DELETE == code) {
-            g.deleteEdge(g.selectedObject.id);
-            g.interactionMode = g.draggingGraph;
-            g.hideValenceSelector();
-        } else if (KEY.ESCAPE == code) {        
-            $('#btnSelect').toolbarButton('toggle');
-            g.selectedObject = {};
-        }
-    } else if (g.interactionMode == g.multiSelect) {
-        if (KEY.DELETE == code) {
-            // Delete all
-            g.deleteSelection();
-        }
-    }
-}
-
-/**
-    Special keyboard handler used by the Node renaming text field
-**/ 
-Graph.prototype.nodeRenameHandler = function(e) {
-    e = e || window.event;
-
-    // Validation
-    if (! g.selectedObject instanceof Node) {
-        return false;
-    }
+    shortcut.add("Ctrl+A", function() {
+        $('#btnAddConcepts').toolbarButton('toggle');
+    }, {'disable_in_input':true});
     
-    var code = e.keyCode;
-    if (!e) {
-        code = e.which;
-    }
+    shortcut.add("Ctrl+E", function() {
+        $('#btnAddConnections').toolbarButton('toggle');
+    }, {'disable_in_input':true});
     
-    if (KEY.ENTER == code) {           
-        var text = $.trim($('#textEditInput').val());
-        if (text == '') {
-            g.hideTextEditor();
-            if (g.selectedObject.newNode) {
-                // Escaping out of first naming - delete node
-                g.deleteNode(g.selectedObject.id);
-            }
-            $('#btnSelect').toolbarButton('toggle');
-            return false;
-        }
-        g.setNodeText(g.selectedObject.id, text);
-        g.hideTextEditor();
-        g.setSizeByText(g.ctx, g.selectedObject);
-        g.repaint();
-        
-        // Check if naming a new node for the first time
-        if (g.selectedObject.newNode) {
-            // If new node, then save it in the database
-            g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdAddDB, "", g.selectedObject.id));
-            g.db_addNode(g.selectedObject);
-        }
-        
-        var n = g.selectedObject;
-        
+    shortcut.add("Delete", function() {
+        g.eventDeleteKey();
+    }, {'target': window, 'disable_in_input':true});
+    
+    shortcut.add("Backspace", function() {
+        g.eventDeleteKey();
+    }, {'target': window, 'disable_in_input':true});
+    
+    shortcut.add("Esc", function() {
         $('#btnSelect').toolbarButton('toggle');
-        
-        g.selectedObject = n;
-        g.selectedObject.selected = true;
-        
-        g.repaint();
-        
-        g.showValenceSelector(g.selectedObject);
-        g.positionSlider(g.selectedObject);
-        g.interactionMode = g.draggingNode;
-    } else if (KEY.ESCAPE == code) {   
+        g.selectedObject = {};
+    }, {'target': window});
+    
+    shortcut.add("Esc", function() {
         g.hideTextEditor();
         if (g.selectedObject.newNode) {
             // Escaping out of first naming - delete node
@@ -214,11 +79,79 @@ Graph.prototype.nodeRenameHandler = function(e) {
             g.interactionMode = g.draggingNode;
         }
         $('#btnSelect').toolbarButton('toggle');
-    } else {
-        // Allow the widget to natively handle its own input
-        return true;
+    }, {'target': 'textEditInput'});
+    
+    shortcut.add("Enter", function() {
+        var selectedObject = g.onEndRenaming();
+    
+        g.selectedObject = selectedObject;
+        g.selectedObject.selected = true;
+        
+        g.repaint();
+        
+        g.showValenceSelector(g.selectedObject);
+        g.positionSlider(g.selectedObject);
+        g.interactionMode = g.draggingNode;
+    }, {'target': 'textEditInput'});
+    
+    shortcut.add("Any", function() {
+        if (g.selectedObject instanceof Node && g.interactionMode != g.renamingNode) {
+            g.interactionMode = g.renamingNode;
+            g.showTextEditor(g.selectedObject);
+        } 
+    }, {'target': window, 'disable_in_input':true});
+    
+    // Disable the context menu
+    document.oncontextmenu = function() {
+        return false;
+    };
+}
+
+Graph.prototype.eventDeleteKey = function() {
+    if (g.selectedObject instanceof Node) {
+        g.deleteNode(g.selectedObject.id);
+        g.interactionMode = g.draggingGraph;
+        g.hideValenceSelector();
+    } else if (g.selectedObject instanceof Edge) {
+        g.deleteEdge(g.selectedObject.id);
+        g.interactionMode = g.draggingGraph;
+        g.hideValenceSelector();
+    } else if (g.interactionMode == g.multiSelect) {
+        g.deleteSelection();
     }
-    return false;
+}
+
+Graph.prototype.onEndRenaming = function() {
+
+    var text = $.trim($('#textEditInput').val());
+    if (text == '') {
+        g.hideTextEditor();
+        if (g.selectedObject.newNode) {
+            // Escaping out of first naming - delete node
+            g.deleteNode(g.selectedObject.id);
+        }
+        $('#btnSelect').toolbarButton('toggle');
+        return false;
+    }
+    
+    g.setNodeText(g.selectedObject.id, text);
+    g.hideTextEditor();
+    g.setSizeByText(g.ctx, g.selectedObject);
+    g.repaint();
+    
+    // Check if naming a new node for the first time
+    if (g.selectedObject.newNode) {
+        // If new node, then save it in the database
+        g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdAddDB, "", g.selectedObject.id));
+        g.db_addNode(g.selectedObject);
+    }
+    
+    var selectedObject = g.selectedObject;
+    
+    $('#btnSelect').toolbarButton('toggle');
+    g.repaint();
+    
+    return selectedObject;
 }
 
 /**
@@ -461,30 +394,7 @@ Graph.prototype.eventMouseDown = function(e) {
     if (g.inputModeState == g.stateDefault && e.button == 0) {
         // A click in renamingNode interaction mode submits
         if (g.interactionMode == g.renamingNode) {
-            var text = $.trim($('#textEditInput').val());
-            if (text == '') {
-                g.hideTextEditor();
-                if (g.selectedObject.newNode) {
-                    // Escaping out of first naming - delete node
-                    g.deleteNode(g.selectedObject.id);
-                }
-                $('#btnSelect').toolbarButton('toggle');
-                return false;
-            }
-            g.setNodeText(g.selectedObject.id, text);
-            g.hideTextEditor();
-            g.setSizeByText(g.ctx, g.selectedObject);
-            
-            // Check if naming a new node for the first time
-            if (g.selectedObject.newNode) {
-                // If new node, then save it in the database
-                g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdAddDB, "", g.selectedObject.id));                                
-                g.db_addNode(g.selectedObject);                
-            }
-            
-            $('#btnSelect').toolbarButton('toggle');
-            
-            g.repaint();
+            g.onEndRenaming();
             return;
         }
         

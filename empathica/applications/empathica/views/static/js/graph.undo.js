@@ -155,8 +155,12 @@ Graph.prototype.undo = function() {
             this.deleteNode(cmd.objId);
         } else if (cmd.property == this.cmdDeleteDB) {
             // Re-add the deleted node
-            this.nodes[cmd.objId] = cmd.newValue; // old node stored in newValue
+            this.nodes[cmd.objId] = cmd.oldValue['dead'];
             this.drawOrder.push(cmd.objId);
+            
+            for (var eid in cmd.oldValue['edges']) {
+                this.edges[eid] = cmd.oldValue['edges'][eid];
+            }
         } else if (cmd.property == this.cmdLayout) {
             for (var i in cmd.oldValue) {
                 node = this.nodes[i];
@@ -175,65 +179,9 @@ Graph.prototype.undo = function() {
             this.db_deleteEdge(this.edges[cmd.objId]);
             this.edges[cmd.objId].newEdge = true;
             this.deleteEdge(cmd.objId);
-        }
-    } else {
-        debugOut("Cannot undo.");
-        debugOut(cmd);
-    }
-    
-    this.repaint();
-    
-    this.redoStack.push(cmd);
-}
-
-/**
-    Redo - currently not called (TODO)
-**/
-Graph.prototype.redo = function() {
-    var cmd = this.redoStack.pop();
-    
-    if (cmd === undefined || cmd === null) {
-        return;
-    }
-    
-    if (cmd.objType == this.cmdNode) {
-        var node = this.nodes[cmd.objId];
-        if (cmd.property == this.cmdText) {
-            node.text = cmd.newValue;
-        } else if (cmd.property == this.cmdDim) {
-            node.dim = cmd.newValue;
-        } else if (cmd.property == this.cmdValence) {
-            node.valence = cmd.newValue;
-        } else if (cmd.property == this.cmdNodePlaceholder) {
-            // NO-op
-        } else if (cmd.property == this.cmdAddDB) {
-            // Delete from database
-            this.db_deleteNode(this.nodes[cmd.objId]);
-            // Kind of a hack, but mark this node as "new" and 
-            // call delete
-            // This will delete the node effectively from the graph
-            // and undo stack, but not push another undo event
-            this.nodes[cmd.objId].newNode = true;
-            this.deleteNode(cmd.objId);
         } else if (cmd.property == this.cmdDeleteDB) {
-            // Re-add the deleted node
-            this.nodes[cmd.objId] = cmd.newValue; // old node stored in newValue
-            this.drawOrder.push(cmd.objId);
-        } else if (cmd.property == this.cmdLayout) {
-            for (var i in cmd.oldValue) {
-                node = this.nodes[i];
-                node.dim = cmd.oldValue[i];
-            }
-        }
-    } else if (cmd.objType == this.cmdEdge) {
-        var edge = this.edges[cmd.objId];
-        if (cmd.property == this.cmdValence) {
-            edge.valence = cmd.oldValue;
-        } else if (cmd.property == this.cmdAddDB) {
-            // Delete from database
-            this.db_deleteEdge(this.edges[cmd.objId]);
-            this.edges[cmd.objId].newEdge = true;
-            this.deleteEdge(cmd.objId);
+            // Re-add the deleted edge
+            this.edges[cmd.objId] = cmd.oldValue;
         }
     } else {
         debugOut("Cannot undo.");
@@ -241,7 +189,4 @@ Graph.prototype.redo = function() {
     }
     
     this.repaint();
-    
-    this.redoStack.push(cmd);
 }
-

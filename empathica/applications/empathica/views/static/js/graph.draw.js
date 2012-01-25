@@ -8,9 +8,18 @@
 /**
     Main function called to draw the nodes and edges
 **/
-Graph.prototype.draw = function(ctx) {
+Graph.prototype.draw = function(ctx, originX, originY) {
+    var oldX = this.originX;
+    var oldY = this.originY;
+    
+    this.originX = originX;
+    this.originY = originY;
+
     this.drawEdges(ctx);
     this.drawNodes(ctx);
+    
+    this.originX = oldX;
+    this.originY = oldY;
 }
 
 /**
@@ -96,6 +105,11 @@ Graph.prototype.drawEdge = function(ctx, edge) {
     
     var from = this.nodes[edge.from];
     var to = this.nodes[edge.to];
+    
+    // Check that the to and from nodes exists
+    if (from === undefined || to === undefined) {
+        return;
+    }
     
     ctx.lineWidth = this.edgeWidth + Math.abs(edge.valence * this.edgeVariance);
 
@@ -317,10 +331,8 @@ Graph.prototype.createImage = function(thumb) {
     var contextCopy = canvasCopy.getContext("2d");
     
     var bounds = this.getBounds();
-    var sourceX = Math.max(0, bounds.left-5);
-    var sourceY = Math.max(0, bounds.top-5);
-    var sourceWidth = bounds.right - bounds.left + 10;
-    var sourceHeight = bounds.bottom - bounds.top + 10;
+    var sourceWidth = bounds.right - bounds.left + 20;
+    var sourceHeight = bounds.bottom - bounds.top + 20;
     
     if (thumb) {
         var thumbX = 407;
@@ -329,34 +341,23 @@ Graph.prototype.createImage = function(thumb) {
         canvasCopy.width = thumbX;
         canvasCopy.height = thumbY;
         
-        var offsetX = sourceWidth - thumbX * Math.floor(sourceWidth / thumbX);
-        var offsetY = sourceHeight - thumbY * Math.floor(sourceHeight / thumbY);
+        sourceWidth = Math.round(sourceWidth + thumbX * (Math.ceil(sourceWidth / thumbX) - sourceWidth / thumbX));
+        sourceHeight = Math.round(sourceHeight + thumbY * (Math.ceil(sourceHeight / thumbY) - sourceHeight / thumbY));
         
-        sourceX = Math.round(sourceX - offsetX / 2);
-        sourceWidth = Math.round(sourceWidth + offsetX);
+        // Draw the CAM on a full canvas
+        var tempCanvas = document.createElement("canvas");
+        tempCanvas.width = sourceWidth;
+        tempCanvas.height = sourceHeight;
+        this.draw(tempCanvas.getContext("2d"), (tempCanvas.width - bounds.left - bounds.right) / 2, (tempCanvas.height - bounds.top - bounds.bottom) / 2);
         
-        sourceY = Math.round(sourceY - offsetY / 2);
-        sourceHeight = Math.round(sourceHeight + offsetY);
-        
-        contextCopy.drawImage(canvas, Math.max(sourceX, 0), Math.max(sourceY, 0), Math.min(sourceWidth, canvas.width), Math.min(sourceHeight, canvas.height), 0, 0, canvasCopy.width, canvasCopy.height);
+        contextCopy.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, canvasCopy.width, canvasCopy.height);
     } else { 
         // This is the target for the image
         canvasCopy.width = sourceWidth;
-        canvasCopy.height = sourceHeight;      
-        
-        sourceX = Math.abs(bounds.left);
-        sourceY = Math.abs(bounds.top);
-        
-        // This is where we will draw the unconstrained map
-        var tempCanvas = document.createElement("canvas");
-        tempCanvas.width = sourceX + sourceWidth;
-        tempCanvas.height = sourceY + sourceHeight;
+        canvasCopy.height = sourceHeight;
         
         // Draw the CAM
-        this.draw(tempCanvas.getContext("2d"));
-        
-        // Copy to the copy canvas
-        contextCopy.drawImage(tempCanvas, sourceX, sourceY, tempCanvas.width - sourceX, tempCanvas.height - sourceY, 0, 0, canvasCopy.width, canvasCopy.height);
+        this.draw(canvasCopy.getContext("2d"), (canvasCopy.width  - bounds.left - bounds.right) / 2, (canvasCopy.height - bounds.top - bounds.bottom) / 2);
     }
 
     return canvasCopy.toDataURL("image/png");
@@ -393,10 +394,10 @@ Graph.prototype.getBounds = function() {
             bounds.right = n.dim.x + n.dim.width/2;
         }
         if (n.dim.y - n.dim.height/2 < bounds.top) {
-            bounds.top = n.dim.y - n.dim.width/2;
+            bounds.top = n.dim.y - n.dim.height/2;
         }
         if (n.dim.y + n.dim.height/2 > bounds.bottom) {
-            bounds.bottom = n.dim.y + n.dim.width/2;
+            bounds.bottom = n.dim.y + n.dim.height/2;
         }
     }
     
@@ -421,10 +422,10 @@ Graph.prototype.getBounds = function() {
         }
     }
     
-    bounds.left = this.scaleX(bounds.left);
-    bounds.top = this.scaleY(bounds.top);
-    bounds.right = this.scaleX(bounds.right);
-    bounds.bottom = this.scaleY(bounds.bottom);
+    bounds.left *= this.zoomScale;
+    bounds.top *= this.zoomScale;
+    bounds.right *= this.zoomScale;
+    bounds.bottom *= this.zoomScale;
     return bounds;
 }
 
@@ -440,10 +441,10 @@ Graph.prototype.scaleY = function(y) {
 }
 
 Graph.prototype.unscaleX = function(x) {
-    return x / this.zoomScale - this.originX;
+    return (x - this.originX) / this.zoomScale;
 }
 
 Graph.prototype.unscaleY = function(y) {
-    return y / this.zoomScale - this.originY;
+    return (y - this.originY) / this.zoomScale;
 }
 
