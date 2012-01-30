@@ -124,16 +124,13 @@ var getSuggestionCount = function() {
 /* Buttons
 *******************************************************************************/
 $("#btnSelect").click(function() {
-    $("#canvasDiv")
-        .css('cursor', 'default');
-    $("#suggestions")
-        .stop(true,true).slideUp(300);
+    $("#canvasDiv").css('cursor', 'default');
+    $("#suggestions").stop(true,true).slideUp(300);
     g.setState(g.stateDefault);
 });
 
 $("#btnAddConcepts").click(function() {
-    $("#canvasDiv")
-        .css('cursor', 'crosshair');
+    $("#canvasDiv").css('cursor', 'crosshair');
     getSuggestions();
     if (getSuggestionCount() > 0) {
         $("#suggestions").stop(true,true).slideDown(300);
@@ -142,10 +139,8 @@ $("#btnAddConcepts").click(function() {
 });
 
 $("#btnAddConnections").click(function() {
-    $("#canvasDiv")
-        .css('cursor', 'crosshair');
-    $("#suggestions")
-        .stop(true,true).slideUp(300);
+    $("#canvasDiv").css('cursor', 'crosshair');
+    $("#suggestions").stop(true,true).slideUp(300);
     g.setState(g.stateAddingEdges);
 });
 

@@ -18,6 +18,8 @@ Graph.prototype.draw = function(ctx, originX, originY) {
     this.drawEdges(ctx);
     this.drawNodes(ctx);
     
+    ctx.fillRect(this.originX, this.originY, 10, 10);
+    
     this.originX = oldX;
     this.originY = oldY;
 }
@@ -81,7 +83,7 @@ Graph.prototype.drawNode = function(ctx, node) {
     this.drawText(ctx, node);
 
     if (node.selected) {
-        this.drawSelectionHandles(ctx,node);
+        this.drawSelectionHandles(ctx, node);
     }
 }
 
@@ -447,4 +449,3 @@ Graph.prototype.unscaleX = function(x) {
 Graph.prototype.unscaleY = function(y) {
     return (y - this.originY) / this.zoomScale;
 }
-

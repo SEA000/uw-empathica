@@ -17,6 +17,7 @@ function debugOut( data ) {
         log(data);
     }
 }
+
 function log( data ) {
     if (typeof console != "undefined") {
         console.log(data);

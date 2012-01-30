@@ -1,9 +1,11 @@
 """
 BEGINNING OF DBPY FILE
 """
+import uuid
+import os
+import sys
 from gluon.settings import settings
 from gluon.tools import *
-import uuid
 from datetime import datetime
 
 mail = Mail()
@@ -22,7 +24,7 @@ if settings.web2py_runtime_gae:
     mail.settings.login = None
 else:
     # if not, use SQLite or other DB
-    db = DAL('sqlite://storage.sqlite')
+    db = DAL('sqlite://storage.sqlite', folder = request.folder + '/../admin/databases')
 
 auth = Auth(globals(), db)
 

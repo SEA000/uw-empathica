@@ -6,52 +6,39 @@
     Last Updated:   2011-04-17
  **/ 
 
-/*
-  Data structure to aggregate commands into database updates
-*/
-function CmdHash () {
-    this.hash = {};
-    return this;
-}
-
-/**
-    Store a new value for: 
-    CmdHash[objType][objId][property] = newValue
-    
-    As values are pushed, they will erase previous entries
-**/
-CmdHash.prototype.addCmd = function(cmd) {
-    // First, check if the entry exists and create if necessary
-    if (this.hash[cmd.objType] === undefined) {
-        this.hash[cmd.objType] = {};
-    }
-    if (this.hash[cmd.objType][cmd.objId] === undefined) {
-        this.hash[cmd.objType][cmd.objId] = {};
-    }
-    
-    this.hash[cmd.objType][cmd.objId][cmd.property] = cmd.newValue;
-}
-
-/**
-    Object representing an operation to be saved to the database
-**/
-function Command (objType, objId, property, oldValue, newValue) {
-    this.objType = objType;
-    this.objId = objId;
-    this.property = property;
-    this.oldValue = oldValue;
-    this.newValue = newValue;
-}
-
 /**
     Push a command onto the undo stack
 **/ 
 Graph.prototype.pushToUndo = function(cmd) {
+    // Add command to the undo stack
     this.undoStack.push(cmd);
     
-    // Keep the stack from getting too big and also save our data periodically
-    if (this.undoStack.length > this.undoStackSize * 2) {
-        this.squishAndSave(this.undoStackSize);
+    // Add command to the save hash
+    if (cmd.objType == this.cmdMulti) {
+        // If a multi command, then add all of its constituents to the hash
+        for (var id in cmd.newValue) {
+            this.cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue[id]);
+        }
+    } else if (cmd.property == this.cmdLayout) {
+        // If a layout command, then add all of its constituents to the hash
+        for (var id in cmd.newValue) {
+            this.cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue[id]);
+        }
+        this.cmdHash.addToHash(this.cmdNode, "", this.cmdGraphMove, { 'x' : g.originX, 'y': g.originY });
+    } else {
+        this.cmdHash.addCmd(cmd);
+    }
+    
+    // Keep the save hash from getting too big and save data periodically
+    this.numOperations += 1;
+    if (this.numOperations > this.saveThreshold) {
+        this.saveChanges();
+        this.numOperations = 0;
+    }
+        
+    // Also keep the undo stack from getting too big
+    if (this.undoStack.length > this.maxUndoStackSize) {
+        this.undoStack.shift();
     }
 }
 
@@ -79,34 +66,7 @@ Graph.prototype.removeFromUndoById = function(nid) {
     }
 }
 
-/**
-    Remove <count> commands from the start of the undo stack
-    and insert them to the CmdHash for aggregation
-    
-    If called without count, then save everything from the stack
-**/
-Graph.prototype.squishAndSave = function(count) {
-    var n = count;
-    if (!count) {
-        debugOut('Saving whole stack to DB');
-        n = this.undoStack.length;
-    }
-    
-    var toSave = this.undoStack.splice(0, n);
-    var cmdHash = new CmdHash();
-    for (var i in toSave) {
-        var cmd = toSave[i];        
-        if (cmd.property == this.cmdLayout) {
-            // If a layout command, then add all of its constituents to the hash
-            for (id in cmd.newValue) {
-                cmdHash.addCmd(new Command(this.cmdNode, id, this.cmdDim, cmd.oldValue[id], cmd.newValue[id]));
-            }
-            cmdHash.addCmd(new Command(this.cmdNode, "", this.cmdGraphMove, "", { 'x' : g.originX, 'y': g.originY }));
-        } else {
-            cmdHash.addCmd(cmd);
-        }
-    }
-    
+Graph.prototype.saveChanges = function() {
     // Save thumbnail 
     var thumb = this.createImage(true);
     this.db_saveImage(thumb, true); 
@@ -116,8 +76,12 @@ Graph.prototype.squishAndSave = function(count) {
     this.db_saveImage(img, false);
     
     // Save the command hash
-    debugOut(JSON.stringify(cmdHash.hash));
-    this.db_saveHash(cmdHash.hash);
+    var hash = this.cmdHash.hash;
+    debugOut(JSON.stringify(hash));
+    this.db_saveHash(hash);
+    
+    // Reset the hash contents
+    this.cmdHash.reset();
 }
 
 /**
@@ -127,66 +91,94 @@ Graph.prototype.squishAndSave = function(count) {
 Graph.prototype.undo = function() {
     var cmd = this.undoStack.pop();
     
+    // Make sure we have a valid command
     if (cmd === undefined || cmd === null) {
         return;
     }
     
     if (cmd.objType == this.cmdNode) {
-        var node = this.nodes[cmd.objId];
-        if (cmd.property == this.cmdText) {
-            node.text = cmd.oldValue;
-        } else if (cmd.property == this.cmdDim) {
-            node.dim = cmd.oldValue;
-            if (g.selectedObject.id == cmd.objId) {
-                g.showValenceSelector(g.selectedObject);
-            }
-        } else if (cmd.property == this.cmdValence) {
-            node.valence = cmd.oldValue;
-        } else if (cmd.property == this.cmdNodePlaceholder) {
-            // NO-op
-        } else if (cmd.property == this.cmdAddDB) {
-            // Delete from database
-            this.db_deleteNode(this.nodes[cmd.objId]);
-            // Kind of a hack, but mark this node as "new" and 
-            // call delete
-            // This will delete the node effectively from the graph
-            // and undo stack, but not push another undo event
-            this.nodes[cmd.objId].newNode = true;
-            this.deleteNode(cmd.objId);
-        } else if (cmd.property == this.cmdDeleteDB) {
-            // Re-add the deleted node
-            this.nodes[cmd.objId] = cmd.oldValue['dead'];
-            this.drawOrder.push(cmd.objId);
-            
-            for (var eid in cmd.oldValue['edges']) {
-                this.edges[eid] = cmd.oldValue['edges'][eid];
-            }
-        } else if (cmd.property == this.cmdLayout) {
-            for (var i in cmd.oldValue) {
-                node = this.nodes[i];
-                node.dim = cmd.oldValue[i];
-            }
-        }  else if (cmd.property == this.cmdGraphMove) {
-            this.originX = cmd.oldValue['x'];
-            this.originY = cmd.oldValue['y'];
-        }
+        this.hadleNodeCommandUndo(cmd.objId, cmd.property, cmd.oldValue);
     } else if (cmd.objType == this.cmdEdge) {
-        var edge = this.edges[cmd.objId];
-        if (cmd.property == this.cmdValence) {
-            edge.valence = cmd.oldValue;
-        } else if (cmd.property == this.cmdAddDB) {
-            // Delete from database
-            this.db_deleteEdge(this.edges[cmd.objId]);
-            this.edges[cmd.objId].newEdge = true;
-            this.deleteEdge(cmd.objId);
-        } else if (cmd.property == this.cmdDeleteDB) {
-            // Re-add the deleted edge
-            this.edges[cmd.objId] = cmd.oldValue;
+        this.hadleEdgeCommandUndo(cmd.objId, cmd.property, cmd.oldValue);
+    } else if (cmd.objType == this.cmdMulti) {
+        for (var nid in cmd.oldValue) {
+            this.hadleNodeCommandUndo(nid, cmd.property, cmd.oldValue[nid]);
         }
     } else {
-        debugOut("Cannot undo.");
+        debugOut("Cannot undo. Unknown command type.");
         debugOut(cmd);
     }
     
     this.repaint();
+}
+
+/**
+    Handles undo of a node property.
+**/
+Graph.prototype.hadleNodeCommandUndo = function(nid, property, oldValue) {
+
+    var node = this.nodes[nid];
+    
+    if (property == this.cmdText) {
+        node.text = oldValue;
+    } else if (property == this.cmdDim) {
+        node.dim = oldValue;
+        if (this.selectedObject == node) {
+            this.positionSlider(node);
+        }
+    } else if (property == this.cmdValence) {
+        node.valence = oldValue;
+    } else if (property == this.cmdNodePlaceholder) {
+        // NO-op
+    } else if (property == this.cmdAddDB) {
+        // Delete from database
+        this.db_deleteNode(this.nodes[nid]);
+        // Kind of a hack, but mark this node as "new" and 
+        // call delete
+        // This will delete the node effectively from the graph
+        // and undo stack, but not push another undo event
+        this.nodes[nid].newNode = true;
+        this.deleteNode(nid);
+    } else if (property == this.cmdDeleteDB) {
+        // Re-add the deleted node
+        this.nodes[nid] = oldValue['dead'];
+        this.drawOrder.push(nid);
+        
+        for (var eid in oldValue['edges']) {
+            this.edges[eid] = oldValue['edges'][eid];
+        }
+    } else if (property == this.cmdLayout) {
+        for (var nid in oldValue) {
+            this.nodes[nid].dim = oldValue[nid];
+        }
+    } else if (property == this.cmdGraphMove) {
+        this.originX = oldValue['x'];
+        this.originY = oldValue['y'];
+    } else {
+        debugOut("Cannot undo. Unknown node property.");
+        debugOut(cmd);
+    }
+}
+
+/**
+    Handles undo of an edge property.
+**/
+Graph.prototype.hadleEdgeCommandUndo = function(eid, property, oldValue) {
+
+    var edge = this.edges[eid];
+    
+    if (property == this.cmdValence) {
+        edge.valence = oldValue;
+    } else if (property == this.cmdAddDB) {
+        // Delete from database
+        this.db_deleteEdge(this.edges[eid]);
+        this.edges[eid].newEdge = true;
+        this.deleteEdge(eid);
+    } else if (property == this.cmdDeleteDB) {
+        // Re-add the deleted edge
+        this.edges[eid] = oldValue;
+    }  else {
+        debugOut("Cannot undo. Unknown edge property.");
+        debugOut(cmd);
+    }
 }

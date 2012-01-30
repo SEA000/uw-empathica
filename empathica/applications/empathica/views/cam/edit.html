@@ -11,6 +11,8 @@
     {{ pass }}
     <script src="{{=URL('static','js/jquery.valign.js')}}"></script>
     <script src="{{=URL('static','js/json2.js')}}"></script>
+    
+    <script>{{ include 'static/js/cmdHash.js' }}</script>
     <script>{{ include 'static/js/graph.util.js' }}</script>
     <script>{{ include 'static/js/graph.canvasExtension.js' }}</script>
     <script>{{ include 'static/js/graph.themes.js' }}</script>
@@ -18,12 +20,9 @@
     <script>{{ include 'static/js/graph.api.js' }}</script>
     <script>{{ include 'static/js/graph.db.js' }}</script>
     <script>{{ include 'static/js/graph.draw.js' }}</script>
-    {{ if settings.web2py_runtime_gae: }}
-    <script>{{ include 'static/js/graph.socket.js' }}</script>
-    {{ pass }}
-    <script>{{ include 'static/js/graph.event.js' }}</script>
-    <script>{{ include 'static/js/graph.undo.js' }}</script>
     <script>{{ include 'static/js/graph.layout.js' }}</script>
+    <script>{{ include 'static/js/graph.event.js' }}</script>
+    <script>{{ include 'static/js/graph.undo.js' }}</script>    
     <script>{{ include 'static/js/shortcut.js' }}</script>
 {{ end #js }}
 

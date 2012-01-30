@@ -33,7 +33,7 @@ Graph.prototype.saveGraph = function(redirect) {
     if (redirect) {
         this.redirectOnSave = redirect;
     }
-    return this.squishAndSave();
+    return this.saveChanges();
 }
 
 /**

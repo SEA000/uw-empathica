@@ -8,11 +8,6 @@ from datetime import datetime
 
 import gluon.contrib.simplejson as json
 
-if settings.web2py_runtime_gae:
-    from google.appengine.api import channel
-    from google.appengine.api import memcache
-    from google.appengine.api import taskqueue
-
 @auth.requires_login()
 def edit():
     '''
@@ -26,17 +21,7 @@ def edit():
         response.title = "Edit - " + conflict.title
         client_id = str(random.random())
         channel_token = 'invalid'
-        
-        if settings.web2py_runtime_gae:
-            maplisteners = memcache.get('map_%s_listeners' % cam.id)
-            if not maplisteners:
-                maplisteners = []
-                memcache.set('map_%s_listeners' % cam.id, maplisteners)
-            channel_token = channel.create_channel(client_id)
-            if client_id not in maplisteners:
-                maplisteners.append(client_id)
-                memcache.set('map_%s_listeners' % cam.id, maplisteners)
-                
+                       
         return dict(channel_token = channel_token, cam = cam, conflictid = conflict.id, conflict = conflict)
     else:
         raise HTTP(400)

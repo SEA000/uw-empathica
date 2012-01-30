@@ -141,7 +141,7 @@ Graph.prototype.db_deleteNode = function(node) {
     Delete an Edge from the DB once it has been removed from the Graph
 **/
 Graph.prototype.db_deleteEdge = function(edge) {
-    if (! (edge instanceof Edge) ) {
+    if (!(edge instanceof Edge)) {
         debugOut('Tried to delete unknown object from database!');
         debugOut(edge);
         return;

@@ -1,7 +1,5 @@
 /** 
-    Auto-layout methods. Layout is currently performed only if a 
-    Graph contains nodes created by the chatbot (i.e. having no set 
-    position) when db_getGraphData() is called.
+    Auto-layout methods.
     
     Author:         Alex Bass
     Last Updated:   2011-04-17
@@ -68,16 +66,14 @@ Graph.prototype.circleLayout = function() {
         coordAngle += angPart;
     }
     
-    this.pushToUndo(new Command(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues));
-    
+    this.pushToUndo(new Command(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues));   
+    this.repaint();
 }
 
 /**
     Position the screen at the geometric centre of the Nodes in the Graph
 **/ 
 Graph.prototype.centreGraph = function() {
-    var canvas = document.getElementById(this.canvasName);
-
     // For undo
     var oldValues = {};
     var newValues = {};
@@ -86,12 +82,12 @@ Graph.prototype.centreGraph = function() {
     var dx = 0;
     var dy = 0;
     var nodeCount = 0;
-    for (var i in this.nodes) {
+    for (var nid in this.nodes) {
         nodeCount++;
-        var n = this.nodes[i];
+        var n = this.nodes[nid];
         dx -= n.dim.x;
         dy -= n.dim.y;
-        oldValues[i] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
+        oldValues[nid] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
     }
     if (nodeCount != 0) {
         dx /= nodeCount;
@@ -99,33 +95,105 @@ Graph.prototype.centreGraph = function() {
     }
     
     // Move components so that the graph origin and theoretical origin coincide
-    for (var i in this.nodes) {
-        var n = this.nodes[i];
+    for (var nid in this.nodes) {
+        var n = this.nodes[nid];
         n.dim.x += dx;
         n.dim.y += dy;
-        newValues[i] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
+        newValues[nid] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
     }
     
     // Adjust complex edge positions
-    for (var i in this.edges) {
-        var edge = g.edges[i];
+    for (var eid in this.edges) {
+        var edge = this.edges[eid];
         if (edge.innerPoints) {
-            for (var p = 0; p < edge.innerPoints.length; p++) {
-                edge.innerPoints[p].x += dx;
-                edge.innerPoints[p].y += dy;
+            for (var i = 0; i < edge.innerPoints.length; i += 1) {
+                var point = edge.innerPoints[p];
+                point.x += dx;
+                point.y += dy;
             }
         }
     }
     
-    if (g.selectedObject instanceof Node || g.selectedObject instanceof Edge) {
-        //g.positionSlider(g.selectedObject);
-        g.showValenceSelector(g.selectedObject);
-    }
+    // Update the graph origin
+    this.originX = this.canvas.width / 2;
+    this.originY = this.canvas.height / 2;
     
-    this.originX = canvas.width/2;
-    this.originY = canvas.height/2;
+    // Push the changes to undo
     this.pushToUndo(new Command(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues));
+
+    // Show the valence selector if appropriate
+    this.showValenceSelector();
     
+    // Redraw the graph
     this.repaint();
 }
 
+/**
+    Modifies node coordinates.
+**/
+Graph.prototype.move = function(node, offsetX, offsetY) {
+    node.dim.x += offsetX / this.zoomScale;
+    node.dim.y += offsetY / this.zoomScale;
+}
+
+/**
+    Moves a single node on the screen.
+     
+    Assumes you are moving a selected node.
+**/
+Graph.prototype.moveSingleNode = function(node, offsetX, offsetY) {
+    if (!(node instanceof Node)) {
+        return;
+    }
+    
+    var oldDim = jQuery.extend(true, {}, node.dim); 
+    this.move(node, offsetX, offsetY);
+    var newDim = jQuery.extend(true, {}, node.dim);
+    
+    // Add to undo
+    this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdDim, oldDim, newDim));
+    
+    // Reposition the valence selector, if appropriate
+    if (this.selectedObject == node) {
+        this.positionSlider(node);
+    }
+    
+    // Repaint the graph
+    this.repaint();
+}
+
+/**
+    Moves a group of nodes on the screen.
+**/
+Graph.prototype.moveSelectedNodes = function(selection, offsetX, offsetY) {
+
+    var oldValues = {};
+    var newValues = {};
+    for (var id in selection) {
+        var obj = selection[id];
+        if (obj instanceof Node) {
+            oldValues[obj.id] = jQuery.extend(true, {}, obj.dim);
+            this.move(obj, offsetX, offsetY);
+            newValues[obj.id] = jQuery.extend(true, {}, obj.dim);
+        }
+    }
+    
+    // Add to undo
+    g.pushToUndo(new Command(g.cmdMulti, "", g.cmdDim, oldValues, newValues));
+    
+    // Repaint the graph
+    this.repaint();
+}
+
+/**
+    Reposition a node in the graph.
+**/
+Graph.prototype.setPosition = function(n, x, y) {    
+    var oldDim = jQuery.extend(true, {}, n.dim);
+    n.dim.x = g.unscaleX(x);
+    n.dim.y = g.unscaleY(y);
+    var newDim = jQuery.extend(true, {}, n.dim);
+
+    // Push to undo stack
+    this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdDim, oldDim, newDim));
+}
