@@ -5,10 +5,10 @@ $.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/edit_modifi
 $("#btnSelect").toolbarButton({ icon: 0, group: "inputMode" });
 $("#btnAddConcepts").toolbarButton({ icon: 1, group: "inputMode" });
 $("#btnAddConnections").toolbarButton({ icon: 2, group: "inputMode" });
+$("#btnAddAmbivalent").toolbarButton({ icon: 6, group: "inputMode" });
 $("#btnSave").toolbarButton({ icon: 3, group: "inputMode" });
 $("#btnExport").toolbarButton({ icon: 4 });
 $("#btnExportHOTCO").toolbarButton({ icon: 5 });
-$("#btnAddComments").toolbarButton({ icon: 6 });
 $("#btnZoomIn").toolbarButton({ icon: 7 });
 $("#btnZoomOut").toolbarButton({ icon: 8 });
 $("#btnZoomFit").toolbarButton({ icon: 9 });
@@ -144,6 +144,12 @@ $("#btnAddConnections").click(function() {
     g.setState(g.stateAddingEdges);
 });
 
+$("#btnAddAmbivalent").click(function() {
+    $("#canvasDiv").css('cursor', 'crosshair');
+    $("#suggestions").stop(true,true).slideUp(300);
+    g.setState(g.stateAddingSpecial, "ambivalent");
+});
+
 $("#btnSave").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph();
@@ -206,6 +212,7 @@ if (showTitle) {
     $("#showTitle").removeAttr('checked');
     $("#showTitle").siblings(".cb-disable").addClass('selected');
 }
+
 var theme = '{{=cam.theme}}';
 
 $.extend($.modal.defaults, {
@@ -230,6 +237,7 @@ $.extend($.modal.defaults, {
 
 $("#btnApply")
     .click(function() {
+        $("#btnApply").blur();           // Hack to reset button state
         var showTitle = $("#showTitle").is(":checked");
         if (showTitle) {
             $("#conflict-title,#cam-title").show();
@@ -241,18 +249,39 @@ $("#btnApply")
         $.modal.close();
     });
 
-$("#btnRecover")
+$("#btnExportToString")
     .click(function() {
-        $.modal.close();
-        window.setTimeout(function() { $("#restoreGraph").modal(); }, 500);
-        return false;
+        $.modal.close();         
+        $("#save-text").val(g.createSaveString());
+        $("#btnExportToString").blur();             // Hack to reset button state
+        setTimeout(function() {             
+            $("#exportForm").modal();             
+        }, 500);            
+    });
+    
+$("#btnSelectAll") 
+    .click(function() {
+        $("#save-text").select();
+    });
+    
+$("#btnImportFromString")
+    .click(function() {
+        $.modal.close();    
+        $("#btnImportFromString").blur();           // Hack to reset button state
+        setTimeout(function() {             
+            $("#importForm").modal();            
+        }, 500);
     });
     
 $("#btnRestore") 
     .click(function() {
-        var saveText = $("#restore-text").text();
+        $("#btnRestore").blur();           // Hack to reset button state
+        var saveText = $("#restore-text").val();
         if (saveText != "") {
-            g.generateGraphFromString(saveText);
+            if(!g.generateGraphFromString(saveText)) {
+                alert("Your import string appears to be incorrect. Please, ensure that you are trying to import a valid Empathica CAM string.");
+                return;
+            }
         }
         $.modal.close();
         g.repaint();
@@ -260,6 +289,12 @@ $("#btnRestore")
     
 /* Initialization
 *******************************************************************************/
+
+$(window).bind('resize', function () { 
+    g.canvas.width = window.innerWidth - 2;
+    g.canvas.height = window.innerHeight - 3;
+    g.repaint();
+});
 
 var gg = new Graph();
 g.initGraphFromDB();

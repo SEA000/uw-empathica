@@ -7,8 +7,8 @@ html, body { background: #fff; }
 #header .wrapper { width: 100%;}
 #header-logo { position: relative; left: 0; margin: 0; }
 #header .center {
-    height: 44px; width: 670px;
-    position: absolute; left: 50%; margin-left: -335px;
+    height: 44px; width: 798px;
+    position: absolute; left: 50%; margin-left: -419px;
 }
 #header ul li { float: left; }
 
@@ -108,7 +108,7 @@ html, body { background: #fff; }
 }
 #modal-form .row .label {
     float: left;
-    width: 100px;
+    width: 120px;
     line-height: 30px;
 }
 #modal-form .row .input {

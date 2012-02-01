@@ -125,6 +125,23 @@ Graph.prototype.initEventListeners = function() {
         }
     }, defaultOptions);
     
+    // Graph move shortcuts
+    shortcut.add("Ctrl+Up", function() { 
+        g.moveOrigin(0, -g.moveOffset);
+    }, defaultOptions);
+    
+    shortcut.add("Ctrl+Down", function() { 
+        g.moveOrigin(0, g.moveOffset);
+    }, defaultOptions);
+    
+    shortcut.add("Ctrl+Left", function() { 
+        g.moveOrigin(-g.moveOffset, 0);
+    }, defaultOptions);
+    
+    shortcut.add("Ctrl+Right", function() { 
+        g.moveOrigin(g.moveOffset, 0);
+    }, defaultOptions);
+    
     // Disable the context menu
     document.oncontextmenu = function() {
         return false;
@@ -153,21 +170,21 @@ Graph.prototype.eventDeleteKey = function() {
 **/
 Graph.prototype.onEndRenaming = function() {
 
-    var text = $.trim($('#textEditInput').val());
+    g.hideTextEditor();
+
+    var text = $.trim(g.textInput.val());
     if (text == '') {
-        g.hideTextEditor();
         if (g.selectedObject.newNode) {
             // Escaping out of first naming - delete node
             g.deleteNode(g.selectedObject.id);
         }
+        
         $('#btnSelect').toolbarButton('toggle');
         return false;
     }
-    
-    g.setNodeText(g.selectedObject, text);
-    g.hideTextEditor();
+
+    g.setNodeText(g.selectedObject, text);    
     g.setSizeByText(g.ctx, g.selectedObject);
-    g.repaint();
     
     // Check if naming a new node for the first time
     if (g.selectedObject.newNode) {
@@ -177,10 +194,7 @@ Graph.prototype.onEndRenaming = function() {
     }
     
     var selectedObject = g.selectedObject;
-    
     $('#btnSelect').toolbarButton('toggle');
-    g.repaint();
-    
     return selectedObject;
 }
 
@@ -193,130 +207,122 @@ Graph.prototype.eventMouseMove = function(e) {
     var mx = coords[0];
     var my = coords[1];
     
-    if (g.inputModeState == g.stateDefault) {
+    // Only move shapes if the mouse is pressed
+    if (g.inputModeState == g.stateDefault && g.mouseDown) {
+        g.possibleDeselect = {};
+        var xOffset = mx - g.prevX;
+        var yOffset = my - g.prevY;
         
-        // Only move shapes if the mouse is pressed
-        if (g.mouseDown) {
-            g.possibleDeselect = {};
-            var xOffset = mx - g.prevX;
-            var yOffset = my - g.prevY;
-            
-            if (g.interactionMode == g.renamingNode) {
-                // ignore movement on the graph while renaming node
-                return;
-            } else if (g.interactionMode == g.draggingNode) {
-                // If there is a node currently selected, move it
-                if (g.selectedObject instanceof Node) {
-                    g.move(g.selectedObject, xOffset, yOffset);
-                    g.positionSlider(g.selectedObject);
-                    g.resizedOrMoved = true;
-                } 
-            } else if (g.interactionMode == g.resizingNode) {
-            
-                if (!(g.selectedObject instanceof Node)) {
-                    debugOut("ERROR: Resizing a node which does not exist");
-                    return;
-                }
-                
-                var xOffset = (mx - g.prevX) / g.zoomScale;
-                var yOffset = (my - g.prevY) / g.zoomScale;
-                
-                var oldy = g.selectedObject.dim.y;
-                var oldx = g.selectedObject.dim.x;
-                var oldw = g.selectedObject.dim.width;
-                var oldh = g.selectedObject.dim.height;
-                
-                // See which handle is being dragged
-                if (g.resizingDirection == g.handleTL) {
-                    // Dragging top left corner
-                    if (!( (yOffset > 0) && (yOffset > oldh - 20) ) && 
-                        !( (xOffset > 0) && (xOffset > oldw - 20) ) ) {                        
-                        g.selectedObject.dim.y += yOffset/2;
-                        g.selectedObject.dim.height -= yOffset;
-                        g.selectedObject.dim.x += xOffset/2;
-                        g.selectedObject.dim.width -= xOffset;
-                    } else {
-                        if (!g.isClickOnHandle(mx, my)) {
-                            g.resizingNode = false;
-                        }
-                    }
-                } else if (g.resizingDirection == g.handleTR) {
-                    // Dragging top right corner
-                    if (!( (yOffset > 0) && (yOffset > oldh - 20) ) && 
-                        !( (xOffset < 0) && (Math.abs(xOffset) > oldw - 20) ) ) {
-                        g.selectedObject.dim.y += yOffset/2;
-                        g.selectedObject.dim.height -= yOffset;
-                        g.selectedObject.dim.x += xOffset/2;
-                        g.selectedObject.dim.width += xOffset;
-                    } else {
-                        if (!g.isClickOnHandle(mx, my)) {
-                            g.resizingNode = false;
-                        }
-                    }
-                } else if (g.resizingDirection == g.handleBL) {
-                    // Dragging bottom left corner
-                    if (!( (yOffset < 0) && (Math.abs(yOffset) > oldh - 20) ) && 
-                        !( (xOffset > 0) && (xOffset > oldw - 20) ) ) {
-                        g.selectedObject.dim.y += yOffset/2;
-                        g.selectedObject.dim.height += yOffset;
-                        g.selectedObject.dim.x += xOffset/2;
-                        g.selectedObject.dim.width -= xOffset;
-                    } else {
-                        if (!g.isClickOnHandle(mx, my)) {
-                            g.resizingNode = false;
-                        }
-                    }
-                } else if (g.resizingDirection == g.handleBR) {
-                    // Dragging bottom right corner
-                    if (!( (yOffset < 0) && (Math.abs(yOffset) > oldh - 20) ) && 
-                        !( (xOffset < 0) && (Math.abs(xOffset) > oldw - 20) ) ) {
-                        g.selectedObject.dim.y += yOffset/2;
-                        g.selectedObject.dim.height += yOffset;
-                        g.selectedObject.dim.x += xOffset/2;
-                        g.selectedObject.dim.width += xOffset;
-                    } else {
-                        if (!g.isClickOnHandle(mx, my)) {
-                            g.resizingNode = false;
-                        }
-                    }
-                }
-                g.resizedOrMoved = true;
+        if (g.interactionMode == g.renamingNode) {
+            // ignore movement on the graph while renaming node
+            return;
+        } else if (g.interactionMode == g.draggingNode) {
+            // If there is a node currently selected, move it
+            if (g.selectedObject instanceof Node) {
+                g.move(g.selectedObject, xOffset, yOffset);
                 g.positionSlider(g.selectedObject);
-                
-            } else if (g.interactionMode == g.draggingGraph) {
-                g.originX += xOffset;
-                g.originY += yOffset;
                 g.resizedOrMoved = true;
-            } else if (g.interactionMode == g.multiSelect) {
-                for (var id in g.selection) {
-                    if (g.selection[id] instanceof Node) {
-                        g.move(g.selection[id], xOffset, yOffset);
-                    }                    
-                }
-                g.resizedOrMoved = true;
+            } 
+        } else if (g.interactionMode == g.resizingNode) {
+        
+            if (!(g.selectedObject instanceof Node)) {
+                debugOut("ERROR: Resizing a node which does not exist");
+                return;
             }
             
-            g.totalX += xOffset;
-            g.totalY += yOffset;
+            var xOffset = (mx - g.prevX) / g.zoomScale;
+            var yOffset = (my - g.prevY) / g.zoomScale;
             
-            g.prevX = mx;
-            g.prevY = my;
+            var oldy = g.selectedObject.dim.y;
+            var oldx = g.selectedObject.dim.x;
+            var oldw = g.selectedObject.dim.width;
+            var oldh = g.selectedObject.dim.height;
             
-            g.repaint();
-        } else {
-            g.mouseOverHandler(e);
+            // See which handle is being dragged
+            if (g.resizingDirection == g.handleTL) {
+                // Dragging top left corner
+                if (!( (yOffset > 0) && (yOffset > oldh - 10) ) && 
+                    !( (xOffset > 0) && (xOffset > oldw - 10) ) ) {                        
+                    g.selectedObject.dim.y += yOffset/2;
+                    g.selectedObject.dim.height -= yOffset;
+                    g.selectedObject.dim.x += xOffset/2;
+                    g.selectedObject.dim.width -= xOffset;
+                } else {                        
+                    if (!g.isClickOnHandle(mx, my)) {
+                        g.resizingDirection = g.notAHandle;
+                    }
+                }
+            } else if (g.resizingDirection == g.handleTR) {
+                // Dragging top right corner
+                if (!( (yOffset > 0) && (yOffset > oldh - 10) ) && 
+                    !( (xOffset < 0) && (Math.abs(xOffset) > oldw - 10) ) ) {
+                    g.selectedObject.dim.y += yOffset/2;
+                    g.selectedObject.dim.height -= yOffset;
+                    g.selectedObject.dim.x += xOffset/2;
+                    g.selectedObject.dim.width += xOffset;
+                } else {
+                    if (!g.isClickOnHandle(mx, my)) {
+                        g.resizingDirection = g.notAHandle;
+                    }
+                }
+            } else if (g.resizingDirection == g.handleBL) {
+                // Dragging bottom left corner
+                if (!( (yOffset < 0) && (Math.abs(yOffset) > oldh - 10) ) && 
+                    !( (xOffset > 0) && (xOffset > oldw - 10) ) ) {
+                    g.selectedObject.dim.y += yOffset/2;
+                    g.selectedObject.dim.height += yOffset;
+                    g.selectedObject.dim.x += xOffset/2;
+                    g.selectedObject.dim.width -= xOffset;
+                } else {
+                    if (!g.isClickOnHandle(mx, my)) {
+                        g.resizingDirection = g.notAHandle;
+                    }
+                }
+            } else if (g.resizingDirection == g.handleBR) {
+                // Dragging bottom right corner
+                if (!( (yOffset < 0) && (Math.abs(yOffset) > oldh - 10) ) && 
+                    !( (xOffset < 0) && (Math.abs(xOffset) > oldw - 10) ) ) {
+                    g.selectedObject.dim.y += yOffset/2;
+                    g.selectedObject.dim.height += yOffset;
+                    g.selectedObject.dim.x += xOffset/2;
+                    g.selectedObject.dim.width += xOffset;
+                } else {
+                    if (!g.isClickOnHandle(mx, my)) {
+                        g.resizingDirection = g.notAHandle;
+                    }
+                }
+            }
+            g.resizedOrMoved = true;
+            g.positionSlider(g.selectedObject);
+            
+        } else if (g.interactionMode == g.draggingGraph) {
+            g.originX += xOffset;
+            g.originY += yOffset;
+            g.resizedOrMoved = true;
+        } else if (g.interactionMode == g.multiSelect) {
+            for (var id in g.selection) {
+                if (g.selection[id] instanceof Node) {
+                    g.move(g.selection[id], xOffset, yOffset);
+                }                    
+            }
+            g.resizedOrMoved = true;
         }
-    } else if (g.inputModeState == g.stateAddingNodes) {
-        g.mouseOverHandler(e);
-    } else if (g.inputModeState == g.stateAddingEdges) {
-        g.mouseOverHandler(e);
         
+        g.totalX += xOffset;
+        g.totalY += yOffset;
+        
+        g.prevX = mx;
+        g.prevY = my;
+        
+        g.repaint();
+    } else {
+        g.mouseOverHandler(e);
+    
         // Show the semi drawn edge
-        if (g.interactionMode == g.addingEdgeAddedOne) {
+        if (g.inputModeState == g.stateAddingEdges && g.interactionMode == g.addingEdgeAddedOne) {
             g.repaint();
-            var saveStyle = g.ctx.strokeStyle;
-            var saveWidth = g.ctx.lineWidth;
             
+            g.ctx.save();
             g.ctx.beginPath();
             g.ctx.strokeStyle = g.newEdgeColour;
             g.ctx.lineWidth = g.newEdgeWidth;
@@ -326,11 +332,10 @@ Graph.prototype.eventMouseMove = function(e) {
             }
             g.ctx.lineTo(mx,my);
             g.ctx.stroke();
-            
-            g.ctx.strokeStyle = saveStyle;
-            g.ctx.lineWidth = saveWidth;
+            g.ctx.restore();
+                
+            g.repaintNode(g.addingEdgeFromNode);
         }
-        g.repaintNode(g.addingEdgeFromNode);
     }
 }
 
@@ -380,14 +385,16 @@ Graph.prototype.eventMouseUp = function(e) {
     // If we've moved or resized the selected node then record this
     if (g.resizedOrMoved) {
         if (g.interactionMode == g.multiSelect) {
-            var nodeList = {};
+            var oldValues = {};
+            var newValues = {};        
+
             for (var i in g.selection) {
                 var n = g.selection[i];
-                nodeList[n.id] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
+                oldValues[n.id] = {'x': n.dim.x - g.totalX, 'y': n.dim.y - g.totalY, 'width': n.dim.width, 'height': n.dim.height};
+                newValues[n.id] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
             }
             
-            g.pushToUndo(new Command(g.cmdMulti, "", g.cmdDim, "", nodeList));
-            return;
+            g.pushToUndo(new Command(g.cmdMulti, "", g.cmdDim, oldValues, newValues));
         } else if (g.selectedObject instanceof Node) {
             var sn = g.selectedObject;
             if (g.oldDim.x != sn.x || g.oldDim.y != sn.y || g.oldDim.width != sn.width || g.oldDim.height != sn.height) {
@@ -396,19 +403,13 @@ Graph.prototype.eventMouseUp = function(e) {
         } else {
             var oldOrigin = { 'x' : g.originX - g.totalX, 'y': g.originY - g.totalY };
             var newOrigin = { 'x' : g.originX, 'y': g.originY };
-            
             g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, oldOrigin, newOrigin));
-        }
-    } else {
-        if (g.interactionMode == g.multiSelect) {
-            return;
         }
     }
     
     // Reset everything for next mousedown event
     g.resizedOrMoved = false;
     g.oldDim = {};
-    g.interactionMode = g.draggingNode;
 }
 
 /**
@@ -458,11 +459,14 @@ Graph.prototype.eventMouseDown = function(e) {
                     g.setSelection(newNode);
                 }
             } else if (newNode == g.handle) {
-                newNode = g.getNodeUnderPointer(mx, my);
-                g.setSelection(newNode);
-                g.interactionMode = g.resizingNode;
-                g.setOldDim(newNode.dim);
-                g.resizingDirection = g.whichHandle(newNode, mx, my);
+                // Attempt to get the parent node
+                newNode = g.getNodeFromHandle(mx, my);
+                if (newNode != this.notANode) {
+                    g.setSelection(newNode);
+                    g.interactionMode = g.resizingNode;                    
+                    g.setOldDim(newNode.dim);
+                    g.resizingDirection = g.whichHandle(newNode, mx, my);
+                }
             } else if (newNode == g.nothingSelected) {
                 g.clearSelection();
             }        
@@ -473,13 +477,12 @@ Graph.prototype.eventMouseDown = function(e) {
             g.setOldDim(g.selectedObject.dim);
             if (oldNode != g.selectedNode) {
                 g.showValenceSelector();
+                
+                // Push node to front of draw stack
                 for(var i = 0; i < g.drawOrder.length; i++) {
                     if (g.drawOrder[i] == g.selectedObject.id) {
-                        var ar1 = g.drawOrder.slice(0,i);
-                        var ar2 = g.drawOrder.slice(i+1,g.drawOrder.length);
-                        ar1 = ar1.concat(ar2);
-                        ar1.push(g.drawOrder[i]);
-                        g.drawOrder = ar1;
+                        g.drawOrder.splice(i, 1);
+                        g.drawOrder.push(g.selectedObject.id);
                         break;
                     }
                 }
@@ -494,25 +497,29 @@ Graph.prototype.eventMouseDown = function(e) {
         return;
     }
     
-    if (g.inputModeState == g.stateAddingNodes) {
-        if (e.button == 2) {
-            $('#btnSelect').toolbarButton('toggle');
-            return;
-        }
-        var newNode = g.addNode("", g.defaultValence, mx, my);
+    // If right click, go back to default mode
+    if (e.button == 2) {
         $('#btnSelect').toolbarButton('toggle');
+        return;
+    }
+    
+    if (g.inputModeState == g.stateAddingNodes || g.inputModeState == g.stateAddingSpecial) {
+        var newNode = g.addNode("", g.defaultValence, mx, my);
+        
+        // Set the special property of the node, if we are adding custom concepts (like ambivalence)
+        if (g.inputModeState == g.stateAddingSpecial && g.addingSpecialType !== undefined) {
+            newNode.setSpecial(g.addingSpecialType);
+        }
+        
+        $('#btnSelect').toolbarButton('toggle');
+        
         g.setSelection(newNode);
         g.interactionMode = g.renamingNode;
         g.showTextEditor(newNode);
         return;
     } 
     
-    if (g.inputModeState == g.stateAddingEdges) {
-        if (e.button == 2) {
-            $("#btnSelect").toolbarButton('toggle');
-            return;
-        }
-        
+    if (g.inputModeState == g.stateAddingEdges) {        
         var node = g.getNodeUnderPointer(mx, my);
         if (node == g.notANode) {
             // Check if its a complex edge and we've already added one node
@@ -536,21 +543,18 @@ Graph.prototype.eventMouseDown = function(e) {
                 }
             }
             
+            // Make sure the edge does not exists and there are no edge circles
             var edge;
-            if (!edgeExists) {
+            if (!edgeExists && g.addingEdgeFromNode.id != node.id) {
                 // add edge
                 edge = g.addEdge(g.addingEdgeFromNode.id, node.id, g.defaultValence, g.pointArray);
                 g.db_addEdge(edge);
                 g.pushToUndo(new Command(g.cmdEdge, edge.id, g.cmdAddDB, "", edge.id));
             }
             
-            // reset midpoint array
-            g.pointArray = [];
-            
             // reset state
-            g.addingEdgeFromNode = new Object();
             $("#btnSelect").toolbarButton('toggle');
-            if (typeof(edge) == "object") {
+            if (edge !== undefined) {
                 g.setSelection(edge);
                 g.showValenceSelector();
             }

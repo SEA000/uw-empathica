@@ -12,10 +12,12 @@
     Available states: 
         Graph.stateAddingNodes
         Graph.stateAddingEdges
+        Graph.stateAddingSpecial
         Graph.stateDefault
  **/
-Graph.prototype.setState = function(state) {
-    return this.setStateFromUI(state);
+Graph.prototype.setState = function(state, nodeType) {
+    this.addingSpecialType = nodeType;
+    this.setStateFromUI(state);
 }
 
 /**
@@ -42,6 +44,17 @@ Graph.prototype.saveGraph = function(redirect) {
 **/
 Graph.prototype.setTheme = function(newTheme) {
     this.theme = newTheme;
+    
+    // Update cached themes
+    for (var nid in this.nodes) {
+        this.nodes[nid].updateTheme();
+    }
+    
+    // Update cached themes
+    for (var eid in this.edges) {
+        this.edges[eid].updateTheme();
+    }
+    
     this.db_saveTheme();
     this.repaint();
 }

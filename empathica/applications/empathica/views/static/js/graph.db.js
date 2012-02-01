@@ -59,7 +59,8 @@ Graph.prototype.db_addNode = function(node) {
             y:          node.dim.y,
             width:      node.dim.width,
             height:     node.dim.height,
-            name:       node.text
+            name:       node.text,
+            special:    node.special
         }, function(data) {
             if (g.db_validate_response(data)) {
                 g.update_node_id(data.token, data.node_id);
@@ -183,6 +184,20 @@ Graph.prototype.db_getGraphData = function() {
             //debugOut(data);
             if (g.db_validate_response(data)) {
             
+                // Set theme
+                var savedTheme = data.mapdata.theme;
+                if (savedTheme != null && savedTheme != "") {
+                    for (var i in THEMES) {
+                        var t = THEMES[i];
+                        if (t.themeName == savedTheme) {
+                            g.setTheme(t);
+                            break;
+                        }
+                    }
+                } else {
+                    g.setTheme(THEMES.DEFAULT);
+                }
+            
                 // Create nodes
                 var nodeCount = 0;
                 for (var id in data.mapdata.nodes) {
@@ -191,8 +206,8 @@ Graph.prototype.db_getGraphData = function() {
                     // Have to create new Node objects from returned data
                     var n = new Node(id, record.text, record.valence);
                     n.dim = record.dim;
-                    n.selected = false;
-                    n.newNode = false;
+                    n.newNode = false; 
+                    n.setSpecial(record.special);                    
                     
                     // Insert into the data structures
                     g.nodes[id] = n;
@@ -211,26 +226,11 @@ Graph.prototype.db_getGraphData = function() {
                         innerPoints = [];
                     }
                     e.innerPoints = innerPoints;
-                    e.selected = false;
+                    e.newEdge = false; 
                     
                     // Insert into data structures
                     g.edges[id] = e;
-                }
-                
-                // Set theme
-                var savedTheme = data.mapdata.theme;
-                if (savedTheme != null && savedTheme != "") {
-                    debugOut("Not null theme: " + savedTheme)
-                    for (var i in THEMES) {
-                        var t = THEMES[i];
-                        if (t.themeName == savedTheme) {
-                            g.setTheme(t);
-                            break;
-                        }
-                    }
-                } else {
-                    g.setTheme(THEMES.DEFAULT);
-                }
+                }                
                 
                 g.originX = data.mapdata.origin['x'];
                 g.originY = data.mapdata.origin['y'];

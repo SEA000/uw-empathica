@@ -107,7 +107,7 @@ Graph.prototype.centreGraph = function() {
         var edge = this.edges[eid];
         if (edge.innerPoints) {
             for (var i = 0; i < edge.innerPoints.length; i += 1) {
-                var point = edge.innerPoints[p];
+                var point = edge.innerPoints[i];
                 point.x += dx;
                 point.y += dy;
             }
@@ -180,6 +180,23 @@ Graph.prototype.moveSelectedNodes = function(selection, offsetX, offsetY) {
     
     // Add to undo
     g.pushToUndo(new Command(g.cmdMulti, "", g.cmdDim, oldValues, newValues));
+    
+    // Repaint the graph
+    this.repaint();
+}
+
+/**
+    Moves the graph origin.
+**/
+Graph.prototype.moveOrigin = function(offsetX, offsetY) {
+ 
+    var oldOrigin = {'x' : this.originX, 'y' : this.originY}; 
+    this.originX += offsetX / this.zoomScale;
+    this.originY += offsetY / this.zoomScale;
+    var newOrigin = {'x' : this.originX, 'y' : this.originY}; 
+    
+    // Add to undo
+    g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, oldOrigin, newOrigin));
     
     // Repaint the graph
     this.repaint();

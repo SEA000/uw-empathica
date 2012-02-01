@@ -83,10 +83,10 @@ def get_graph_data(map_id):
         edges = {}
         
         for row in db(db.Connection.id_map == map_id).select():
-            edges[row.id] = { 'id': row.id, 'valence': row.valence, 'inner_points': row.inner_points, 'from': row.id_first_node, 'to': row.id_second_node, 'selected': False }
+            edges[row.id] = { 'id': row.id, 'valence': row.valence, 'inner_points': row.inner_points, 'from': row.id_first_node, 'to': row.id_second_node }
             
         for node in db(db.Node.id_map == map_id).select():
-            nodes[node.id] = { 'id': node.id, 'text': node.name, 'valence': node.valence, 'dim': { 'x': node.x, 'y': node.y, 'width' : node.width, 'height' : node.height }, 'selected': False, 'newNode': False }
+            nodes[node.id] = { 'id': node.id, 'text': node.name, 'valence': node.valence, 'dim': { 'x': node.x, 'y': node.y, 'width' : node.width, 'height' : node.height }, 'special' : node.special}
             
         mapdata = {
                 'mapid' : map_id,
@@ -105,9 +105,12 @@ def set_graph_data(map_id, nodes, edges, origin):
     Set the graph data based on the incoming node and edge strings.
     '''
     if(auth.has_permission('update', db.Map, map_id)):
+        
+        # Delete old nodes and edges
+        db(db.Node.id_map == map_id).delete()
+        db(db.Connection.id_map == map_id).delete()
     
-        map = db.Map(map_id)
-    
+        # Parse the input data
         nodes_to_add = json.loads(nodes)
         edges_to_add = json.loads(edges)
         origin = json.loads(origin)
@@ -117,7 +120,7 @@ def set_graph_data(map_id, nodes, edges, origin):
         
         for token, node in nodes_to_add.items():
             dim = node['dim']
-            node_id = db.Node.insert(id_map = map_id, valence = node['valence'], x = dim['x'], y = dim['y'], width = dim['width'], height = dim['height'], name = node['text'])
+            node_id = db.Node.insert(id_map = map_id, valence = node['valence'], x = dim['x'], y = dim['y'], width = dim['width'], height = dim['height'], name = node['text'], special = node['special'])
             node_ids[token] = node_id
         
         for token, edge in edges_to_add.items():
@@ -176,7 +179,7 @@ def save_hash(map_id, hash):
     return dict(success=True)
         
 @service.json
-def add_node(map_id, token, x, y, width, height, name):
+def add_node(map_id, token, x, y, width, height, name, special):
     '''
     Adds a node to the database.
     Note: By default set valences to 0 for new nodes.
@@ -184,7 +187,7 @@ def add_node(map_id, token, x, y, width, height, name):
     if not auth.has_permission('update', db.Map, map_id):
         return dict(success=False, token=token)
         
-    node_id = db_add_node(map_id, token, x, y, width, height, name)
+    node_id = db_add_node(map_id, token, x, y, width, height, name, special)
     return dict(success=True, token=token, node_id=node_id)
 
 @service.json
@@ -367,12 +370,12 @@ def db_save_origin(map_id, origin):
     db.Map[map_id] = dict(originX = origin['x'], originY = origin['y'])
     db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
         
-def db_add_node(map_id, token, x, y, width, height, name):
+def db_add_node(map_id, token, x, y, width, height, name, special):
     '''
     Adds a node to the database.
     Note: By default set valences to 0 for new nodes.
     '''
-    node_id = db.Node.insert(id_map = map_id, valence = 0, x = x, y = y, width = width, height = height, name = name)
+    node_id = db.Node.insert(id_map = map_id, valence = 0, x = x, y = y, width = width, height = height, name = name, special = special)
     db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email, is_empty = False)
     return node_id
 

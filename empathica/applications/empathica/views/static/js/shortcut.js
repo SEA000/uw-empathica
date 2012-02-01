@@ -31,12 +31,17 @@ shortcut = {
 		var func = function(e) {
 			e = e || window.event;
 			
+            // If we are in a modal dialog, disable all shortcuts
+            if ($("#modal-container").is(":visible")) {
+                return;
+            }
+            
 			if(opt['disable_in_input']) { //Don't enable shortcut keys in Input, Textarea fields
 				var element;
-				if(e.target) element=e.target;
+				if(e.target) element=e.target;                
 				else if(e.srcElement) element=e.srcElement;
-				if(element.nodeType==3) element=element.parentNode;
-
+				if(element.nodeType==3) element=element.parentNode;                
+            
 				if(element.tagName == 'INPUT' || element.tagName == 'TEXTAREA') return;
 			}
 	

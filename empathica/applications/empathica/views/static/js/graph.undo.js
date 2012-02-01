@@ -77,7 +77,7 @@ Graph.prototype.saveChanges = function() {
     
     // Save the command hash
     var hash = this.cmdHash.hash;
-    debugOut(JSON.stringify(hash));
+    //debugOut(JSON.stringify(hash));
     this.db_saveHash(hash);
     
     // Reset the hash contents

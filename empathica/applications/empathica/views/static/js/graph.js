@@ -45,6 +45,9 @@ function Graph() {
     */
     this.hexOffset = 0.6; 
     
+    // Special node types
+    this.ambivalent = "ambivalent";
+    
     // Colour scheme for the graph
     this.theme = THEMES.DEFAULT;
     
@@ -131,11 +134,13 @@ function Graph() {
     this.addingEdgeFromNode = new Object();
     this.addingEdgeAddedZero = "addingEdgeZero";
     this.addingEdgeAddedOne = "addingEdgeOne";
+    this.addingSpecialType = "";
     this.allowComplexEdge = true;       // Set this to false to disallow the creation of multi-point edges
 
     // UI Input mode state machine - defines Graph behaviour based on UI settings
     this.stateAddingNodes = "stateAddingNodes";
     this.stateAddingEdges = "stateAddingEdges";
+    this.stateAddingSpecial = "stateAddingSpecial";
     this.stateDefault = "stateDefault";
     
     this.inputModeState = this.stateDefault;        // current graph state
@@ -181,8 +186,8 @@ function Graph() {
     this.zoomScale = 1;
     this.originX = 0;
     this.originY = 0;
-    this.maxZoomIn = 0.1;
-    this.maxZoomOut = 3;
+    this.maxZoomOut = 1;
+    this.maxZoomIn = 5;
     
     // Initialize event listeners
     this.initEventListeners();
@@ -205,6 +210,11 @@ function Graph() {
     this.hideTextEditor();
     this.hideValenceSelector();
     
+    // Setting up the canvas
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight - 1;
+    this.ctx.lineCap = this.edgeLineCap;
+    
     g = this;
 }
 
@@ -213,10 +223,59 @@ function Graph() {
 **/
 function Node (id, text, nodeValence) {
     this.id = id;
-    this.text = text;
-    this.valence = nodeValence;
+    this.text = text;    
+    
     this.dim = {};
+    this.special = "";
+    this.nodeType = "";
+    this.draw = drawNormal;
+    
     this.newNode = true;
+    this.selected = false;
+    
+    this.setValence(nodeValence);
+}
+
+Node.prototype.setValence = function(valence) {
+    this.valence = valence;
+    
+    // Special node type override the normal themes and draw functions
+    if (this.special != ""){
+        return;
+    }
+
+    if (this.valence > g.neutralValence) {
+        this.nodeType = 'positiveNode';   
+        this.outline = drawOval;
+    } else if (this.valence < g.neutralValence) {
+        this.nodeType = 'negativeNode';
+        this.outline = drawHex;
+    } else {
+        this.nodeType = 'neutralNode';
+        this.outline = drawRect;
+    }
+    
+    this.updateTheme(); 
+}
+
+Node.prototype.setSpecial = function(type) {
+    this.special = type;
+    if (this.special == null) {
+        this.special = "";
+    }
+    
+    // Update the draw function and theme
+    if (this.special == g.ambivalent){
+        this.nodeType = 'ambivalentNode';
+        this.outline = drawHex;
+        this.draw = drawAmbivalent;
+    }
+    
+    this.updateTheme();
+}
+
+Node.prototype.updateTheme = function() {
+    this.theme = g.theme[this.nodeType];
 }
 
 /**
@@ -226,9 +285,31 @@ function Edge(id, from, to, v) {
     this.id = id;
     this.from = from;
     this.to = to;
-    this.valence = v;
+    
+    this.edgeType = "";
     this.innerPoints = new Array();
     this.complex = false;
+    
+    this.newEdge = true;
+    this.selected = false;
+    
+    this.setValence(v);
+}
+
+Edge.prototype.setValence = function(valence) {
+    this.valence = valence;
+    
+    if (this.valence < g.neutralValence) {
+        this.edgeType = 'negativeEdge';
+    } else {
+        this.edgeType = 'positiveEdge';
+    }
+    
+    this.updateTheme();
+}
+
+Edge.prototype.updateTheme = function() {
+    this.theme = g.theme[this.edgeType];
 }
 
 /**
@@ -244,6 +325,7 @@ function Point(x,y) {
     Available states: 
     this.stateAddingNodes
     this.stateAddingEdges
+    this.stateAddingSpecial
     this.stateDefault
     
     this.inputModeState = this.stateDefault;        // current graph state
@@ -251,36 +333,35 @@ function Point(x,y) {
 Graph.prototype.setStateFromUI = function(newState) {
     if (this.stateAddingNodes != newState &&
         this.stateAddingEdges != newState &&
+        this.stateAddingSpecial != newState &&
         this.stateDefault != newState) {
         debugOut('Attempting to set unknown state: ' + newState);
-        return false;
+        return;
     }
 
     // Stuff that should always happen
     this.clearSelection();
     
     this.addingEdgeFromNode = new Object();   
+    this.pointArray = [];
+    
     this.hideValenceSelector();
     this.hideTextEditor();
         
     // Repaint the graph
     this.repaint();
     
-    // Let cursor be handled by the toolbar
-    if (newState == this.stateDefault) {
-    } else if (newState == this.stateAddingNodes) {
-    } else if (newState == this.stateAddingEdges) {
+    // Update the graph state
+    if (newState == this.stateAddingEdges) {
         this.interactionMode = this.addingEdgeAddedZero;
     }
-    
     this.inputModeState = newState;
-    return true;
 }
 
 /**
     Add a node from the suggestion list
 **/
-Graph.prototype.suggestedNode = function( id, nodeText, nodeValence, x, y) {
+Graph.prototype.suggestedNode = function(id, nodeText, nodeValence, x, y) {
 
     // Create node
     var n = new Node(id, nodeText, nodeValence);
@@ -347,8 +428,6 @@ Graph.prototype.addEdge = function(id1, id2, v, inPts) {
         e.innerPoints = inPts;
         e.complex = true;
     }
-    e.selected = false;
-    e.newEdge = true;    
     
     // Add it to the undo stack
     this.pushToUndo(new Command(this.cmdEdge, e.id, this.cmdNodePlaceholder, "", e.id));
@@ -370,7 +449,7 @@ Graph.prototype.setNodeText = function(node, newText) {
         return;
     }
     
-    this.pushToUndo(new Command(this.cmdNode, id, this.cmdText, node.text, newText));
+    this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdText, node.text, newText));
     node.text = newText;    
     
     this.repaint();
@@ -524,8 +603,8 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
     
     // reset node width and height
     var oldDim = node.dim;
-    node.dim.width = 100;
-    node.dim.height = 60;
+    node.dim.width = 100 / this.zoomScale;
+    node.dim.height = 60 / this.zoomScale;
     
     // continue resizing node until it fits
     var lineArray = new Array();
@@ -605,7 +684,7 @@ Graph.prototype.getTextLines = function(ctx, node) {
     
     ctx.fontStyle = style;
     
-    var length = node.dim.width * this.zoomScale * this.textWidthInNode;
+    var length = node.dim.width * this.textWidthInNode;
     var lineWidth = 0;
     for (var i = 0; i < words.length; i++) {
         var word = words[i];        
@@ -723,18 +802,39 @@ Graph.prototype.getNodeUnderPointer = function(mx, my) {
     for (var i = this.drawOrder.length - 1; i >= 0; i -= 1) {
         var node = this.nodes[this.drawOrder[i]];
         
-        if (node.valence == this.neutralValence) {
-            this.drawRect(this.ctx, node);
-        } else if (node.valence > this.neutralValence) {
-            this.drawOval(this.ctx, node);
-        } else {
-            this.drawHex(this.ctx, node);
-        }
+        node.outline(this.ctx);
         
         if (this.ctx.isPointInPath(mx, my)) {
             return node;
         }
     }
+    return this.notANode;
+}
+
+/**
+    Given that mx, my is within a handle, returns its parent node.
+**/
+Graph.prototype.getNodeFromHandle = function(mx, my) {
+
+    var halfHandleSize = this.handleSize/2;
+
+    // Traverse the nodes
+    for (var nid in this.nodes) {
+        var node = this.nodes[nid];
+                
+        var left = this.scaleX(node.dim.x - node.dim.width/2);
+        var right = this.scaleX(node.dim.x + node.dim.width/2);
+        var top = this.scaleY(node.dim.y - node.dim.height/2);
+        var bottom = this.scaleY(node.dim.y + node.dim.height/2);
+
+        if (this.containedIn(mx, my, left  - halfHandleSize, top    - halfHandleSize, left  + halfHandleSize, top    + halfHandleSize) ||
+            this.containedIn(mx, my, left  - halfHandleSize, bottom - halfHandleSize, left  + halfHandleSize, bottom + halfHandleSize) ||
+            this.containedIn(mx, my, right - halfHandleSize, top    - halfHandleSize, right + halfHandleSize, top    + halfHandleSize) ||
+            this.containedIn(mx, my, right - halfHandleSize, bottom - halfHandleSize, right + halfHandleSize, bottom + halfHandleSize)) {
+            return node;
+        }
+    }
+    
     return this.notANode;
 }
 
@@ -885,6 +985,11 @@ Graph.prototype.showValenceSelector = function(obj, mx, my) {
     }
         
     if (obj instanceof Node) {
+        // Only show the valence selector for non-special nodes
+        if (obj.special != "") {
+            return;
+        }
+    
         this.valenceSlider.css('left', this.scaleX(obj.dim.x) - 50);
         this.valenceSlider.css('top', this.scaleY(obj.dim.y + obj.dim.height / 2) + 10);
     } else if (obj instanceof Edge) {
@@ -923,7 +1028,7 @@ Graph.prototype.positionSlider = function(node) {
 // Event handler for valence slider
 Graph.prototype.valenceSlide = function(e, ui) {
     if (g.selectedObject instanceof Node || g.selectedObject instanceof Edge) {
-        g.selectedObject.valence = g.normalize(ui.value);
+        g.selectedObject.setValence(g.normalize(ui.value));
         g.repaint();
     } else {
         debugOut(g.selectedObject);
@@ -937,7 +1042,9 @@ Graph.prototype.sliderStart = function(e, ui) {
     }
 }
 
-// Record valence change once slider is dropped
+/**
+    Record valence change once slider is dropped
+**/
 Graph.prototype.sliderStop = function(e, ui) {
     if (g.selectedObject instanceof Node) {
         g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdValence, g.valenceOld, g.selectedObject.valence));
@@ -1084,7 +1191,7 @@ Graph.prototype.zoomOut = function() {
     Performs a zoom operation.
 **/
 Graph.prototype.zoom = function(zoomBy) {
-    this.zoomScale = Math.min(Math.max(this.zoomScale + zoomBy, this.maxZoomIn), this.maxZoomOut);
+    this.zoomScale = Math.min(Math.max(this.zoomScale + zoomBy, this.maxZoomOut), this.maxZoomIn);
     this.zoomScale = Math.round(this.zoomScale * Math.pow(10, 2)) / Math.pow(10, 2);
     
     // Hide interaction components
@@ -1115,15 +1222,9 @@ Graph.prototype.repaintNode = function(node) {
     
     this.ctx.save();
     
-    if (node.valence < this.neutralValence) {
-        this.drawHex(this.ctx, node);
-    } else if (node.valence > this.neutralValence) {
-        this.drawOval(this.ctx, node);
-    } else { 
-        this.drawRect(this.ctx, node);
-    }
-    
+    node.outline(this.ctx);
     this.ctx.clip();
+    
     this.drawNode(this.ctx, node);
     this.ctx.restore();
 }
@@ -1132,14 +1233,7 @@ Graph.prototype.repaintNode = function(node) {
     Repaints the CAM.
 **/
 Graph.prototype.repaint = function() {
-
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);    
-    
-    // TODO: remove the added height these are currently put in to prevent
-    // the canvas from showing scrollbars
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight - 1;
-    
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);        
     this.draw(this.ctx, this.originX, this.originY);
 }
 
@@ -1171,28 +1265,57 @@ Graph.prototype.createSaveString = function() {
     Recreates the graph from a save string.
 **/
 Graph.prototype.generateGraphFromString = function(saveText) {
-    var save = JSON.parse(saveText);
+    var save;
+    try{
+        save = JSON.parse(saveText);
+    }catch(e){
+        return false;
+    }
+    
+    // Clear the current UI states
+    $('#btnSelect').toolbarButton('toggle');
 
     // Remove all existing nodes
+    this.drawOrder.length = 0;
     for (var nid in this.nodes) {
-        this.deleteNode(nid);
+        delete this.nodes[nid];
     }
     
     for (var eid in this.edges) {
-        this.deleteEdge(eid);
+        delete this.edges[eid];
     }
     
     // Add exported nodes
     nodeMap = {};
     for (var nid in save.nodes) {
-        var node = save.nodes[nid];
-        var newNode = this.addNode(node.text, node.valence, node.dim.x, node.dim.y);
-        nodeMap[node.id] = newNode.id;
+        var record = save.nodes[nid];
+        
+        var node = new Node(guid(), record.text, record.valence);
+        node.dim.x = record.dim.x;
+        node.dim.y = record.dim.y;
+        node.dim.width = record.dim.width;
+        node.dim.height = record.dim.height;
+        node.setSpecial(record.special);
+        
+        // Add to control structures
+        this.nodes[node.id] = node;
+        this.drawOrder.push(node.id);
+        
+        nodeMap[record.id] = node.id;
     }
     
     for (var eid in save.edges) {
-        var edge = save.edges[eid];
-        this.addEdge(nodeMap[edge.from], nodeMap[edge.to], edge.valence, edge.innerPoints);
+        var record = save.edges[eid];
+        
+        var edge = new Edge(guid(), nodeMap[record.from], nodeMap[record.to], record.valence);
+        if (record.innerPoints) { // exists and true
+            // add points to complex edge
+            edge.innerPoints = record.innerPoints;
+            edge.complex = true;
+        }
+        
+        // Insert into data structures
+        this.edges[edge.id] = edge;
     }
     
     // Compute the new origin
@@ -1200,4 +1323,5 @@ Graph.prototype.generateGraphFromString = function(saveText) {
     
     // Push nodes and edges to DB
     g.db_setGraphData(this.nodes, this.edges, { 'x': this.originX, 'y': this.originY });
+    return true;
 }

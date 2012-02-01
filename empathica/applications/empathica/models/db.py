@@ -109,9 +109,7 @@ db.define_table('Node',
         Field('width', 'double'),
         Field('height', 'double'),
         Field('id_map', db.Map),
-        Field('visible', 'boolean', default = True),
-        Field('subsumes', 'list:reference Node'),
-        Field('opposite', 'list:reference Node'))
+        Field('special', 'string'))
 
 db.define_table('NodeMapping',
         Field('node_one', db.Node),

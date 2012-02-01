@@ -42,14 +42,16 @@
         <li id="btnSelect" class="tooltip" title="Selection Tool"></li>
         <li id="btnAddConcepts" class="tooltip" title="Add Concepts (Ctrl + A)"></li>
         <li id="btnAddConnections" class="tooltip" title="Add Connections (Ctrl + E)"></li>
-        <li id="btnSave" class="tooltip" title="Save the CAM (Ctrl + S)"></li>
-        <li id="btnExport" class="tooltip" title="Export to PNG"></li>
-        <li id="btnExportHOTCO" class="tooltip" title="Export to HOTCO"></li>
-        <li id="btnAddComments" class="tooltip hidden" title="Add Comments"></li>
+        <li id="btnAddAmbivalent" class="tooltip" title="Add Ambivalent Concepts"></li>        
         <li class="divider"></li>
         <li id="btnZoomIn" class="tooltip" title="Zoom In (Ctrl + Up)"></li>
         <li id="btnZoomOut" class="tooltip" title="Zoom Out (Ctrl + Down)"></li>
         <li id="btnZoomFit" class="tooltip" title="Center on Screen"></li>
+        <li class="divider"></li>
+        <li id="btnSave" class="tooltip" title="Save the CAM (Ctrl + S)"></li>
+        <li id="btnExport" class="tooltip" title="Export to PNG"></li>
+        <li id="btnExportHOTCO" class="tooltip" title="Export to HOTCO"></li>
+        <li class="divider"></li>
         <li id="btnSettings" class="tooltip" title="Settings"></li>
     </ul>
 {{ end #header-center }}
@@ -59,8 +61,7 @@
     <h3 id="cam-title" class="unselectable">{{=cam.title}}</h3>
     <div id="suggestions">
         <span class="label">Suggestions:</span>
-        <ul class="">
-        </ul>
+        <ul class=""></ul>
     </div>
     <div id="canvasDiv" style="overflow:hidden">
         <canvas id="cam"></canvas>
@@ -72,30 +73,30 @@
         <div id='valenceDiv'>
             <div id='valenceInput'></div>
         </div>
-        <div id="saveString" class="hidden">
-            <h2 style="background-color:#B90504" id="modal-header">Error!</h2>
+        <div id="exportForm" class="hidden">
+            <h2 id="modal-header">CAM Export</h2>
             <div id="modal-form" style="width:500px">
-                <center>
                 <label class="row">
-                    There was a problem saving your work.
-                    <br /><br />Please copy and save the cryptic text below. This text can be used later to restore your unsaved changes (goto Settings).
+                    The cryptic string below is a representation of your CAM. <br/><br/>
+                    You could use it to restore your CAM later or you could share it with other Empathica users.
                 </label>
-                </center>
                 <div class="row">
-                    <textarea id="save-text" style="width:495px; height: 200px; margin-top:10px">
-                    </textarea>
+                    <textarea id="save-text" style="width:495px; height: 200px; margin-top:10px; overflow: auto; font-size: 12px;" readonly="readonly"></textarea>                </div>
+                <div class="row">
+                    <button id="btnSelectAll" class="right">Select All</button>
                 </div>
             </div>
         </div>
-        <div id="restoreGraph" class="hidden">
-            <h2 id="modal-header">Recover</h2>
-            <div id="modal-form" style="width: 500px"><center>
-                <label class="row">
-                    Copy and paste the cryptic recovery string below:
-                </label></center>
+        <div id="importForm" class="hidden">
+            <h2 id="modal-header">CAM Import/Recovery</h2>
+            <div id="modal-form" style="width: 500px">
+                <center>
+                    <label class="row">
+                        Copy and paste the cryptic string representation of the imported CAM below:
+                    </label>
+                </center>
                 <div class="row">
-                    <textarea id="restore-text" style="width:495px; height: 200px; margin-top:10px">
-                    </textarea>
+                    <textarea id="restore-text" style="width:495px; height: 200px; margin-top:10px; overflow: auto; font-size: 12px;"></textarea>
                 </div>
                 <div class="row">
                     <button id='btnRestore' class="right">Restore</button>
@@ -106,7 +107,7 @@
     <!-- Settings Window  -->
     <div id="winSettings" class="hidden">
         <h2 id="modal-header">Settings</h2>
-        <div id="modal-form" style="width:300px;">
+        <div id="modal-form" style="width:320px;">
             <div class="row">
                 <div class="label">Show Title</div>
                 <div class="input">
@@ -126,10 +127,16 @@
                 </select>
             </div>
             <div class="row">
-                <button id="btnRecover" class="left">Recover</button>
                 <button id="btnApply" class="right">Apply</button>
             </div>
             <div class="clear"></div>
+            <div class="row">
+                <div class="label">CAM Recovery</div>
+            </div>
+            <div class="row">
+                <button id="btnExportToString" class="left">Export CAM</button>
+                <button id="btnImportFromString" class="right">Import from String</button>
+            </div>
         </div>
     </div>
 {{ return #content }}

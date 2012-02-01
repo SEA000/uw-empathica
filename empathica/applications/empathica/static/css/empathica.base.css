@@ -232,11 +232,11 @@ button:hover, input[type='submit']:hover, input[type='button']:hover {
     border-bottom: 2px solid #e1e1e1;    
     outline: 1px solid #e1e1e1 !important;
 }
+
 /* Select */
 select {
     border: 1px solid #e1e1e1;
 }
-
 
 /* Radio | CREDIT: http://devgrow.com/iphone-style-switches */
 .cb-enable, .cb-disable, .cb-enable span, .cb-disable span { background: url("../images/switch.png") repeat-x; display: block; float: left; }
@@ -273,4 +273,4 @@ select {
     text-align: center;
     padding: 10px 30px 10px 30px;
 }
-#modal-form { padding: 30px; }
+#modal-form { padding: 20px; }
