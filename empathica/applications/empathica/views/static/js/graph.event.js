@@ -347,18 +347,23 @@ Graph.prototype.mouseOverHandler = function(e) {
     var mx = coords[0];
     var my = coords[1];
     var newNode = g.getObjectUnderPointer(mx, my);
+    var oldHover = g.hoverObject;
     if (newNode instanceof Node) {
-        if (newNode.selected) {
-            return;
+        if (!newNode.selected) {
+            g.hoverObject = newNode;
+        } else if (newNode != g.hoverObject) {
+            g.hoverObject = null;
         }
-        // Mousing over node
-        g.hoverObject = newNode;
     } else if (newNode instanceof Edge) {
         g.hoverObject = newNode;
-    } else {
-        g.hoverObject = {};
+    } else if (g.hoverObject) {
+        g.hoverObject = null;
     }
-    g.repaint();
+    
+    // Only need to repaint if hover changed
+    if (oldHover != g.hoverObject) {
+        g.repaint();
+    }
 }
 
 /**
@@ -400,6 +405,7 @@ Graph.prototype.eventMouseUp = function(e) {
             if (g.oldDim.x != sn.x || g.oldDim.y != sn.y || g.oldDim.width != sn.width || g.oldDim.height != sn.height) {
                 g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdDim, g.oldDim, g.selectedObject.dim));
             }
+            g.interactionMode = g.draggingNode;
         } else {
             var oldOrigin = { 'x' : g.originX - g.totalX, 'y': g.originY - g.totalY };
             var newOrigin = { 'x' : g.originX, 'y': g.originY };
@@ -584,6 +590,10 @@ Graph.prototype.eventMouseDoubleClick = function(e) {
     of a CAM. 
 **/
 Graph.prototype.eventMouseWheel = function (e) {   
+    var coords = g.getCursorPosition(e);
+    var mx = coords[0];
+    var my = coords[1];
+
     var move = 0;
     if (e.wheelDelta) {
         // Chrome, IE
@@ -592,17 +602,20 @@ Graph.prototype.eventMouseWheel = function (e) {
         // Firefox
         move = e.detail / -3;
     }     
-    g.zoom(move / 10);
+    
+    g.zoom(move / 10, mx, my);
 }
 
 /**
     Helper method to save the node dimensions before mousemove
 **/
 Graph.prototype.setOldDim = function (dim) {
-    var d = {};
-    d.x = dim.x;
-    d.y = dim.y;
-    d.width = dim.width;
-    d.height = dim.height;
-    g.oldDim = d;
+    if(dim !== undefined) {
+        var d = {};
+        d.x = dim.x;
+        d.y = dim.y;
+        d.width = dim.width;
+        d.height = dim.height;
+        g.oldDim = d;
+    }    
 }

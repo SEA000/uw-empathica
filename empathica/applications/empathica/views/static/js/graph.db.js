@@ -221,10 +221,21 @@ Graph.prototype.db_getGraphData = function() {
                     
                     // Have to create a new Edge object from returned data
                     var e = new Edge(record.id, record.from, record.to, record.valence);
-                    var innerPoints = JSON.parse(record.inner_points);
+                    
+                    // Try to parse inner points
+                    var innerPoints;
+                    try {
+                        innerPoints = JSON.parse(record.inner_points);
+                    } catch (e) {
+                        debugOut('Weird inner points: ' + record.inner_points);
+                    }
+                    
+                    // Make sure we have a valid inner points array
                     if (!innerPoints || innerPoints == null) {
                         innerPoints = [];
                     }
+                    
+                    // Set other properties
                     e.innerPoints = innerPoints;
                     e.newEdge = false; 
                     

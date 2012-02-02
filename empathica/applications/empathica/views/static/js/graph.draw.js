@@ -17,7 +17,7 @@ Graph.prototype.draw = function(ctx, originX, originY) {
 
     this.drawEdges(ctx);
     this.drawNodes(ctx);
-    
+
     this.originX = oldX;
     this.originY = oldY;
 }
@@ -95,7 +95,9 @@ function drawNormal (ctx) {
     Draw the Edges
 **/
 Graph.prototype.drawEdges = function(ctx) {
-    for(i in this.edges) {
+    ctx.strokeStyle = this.edgeColour;
+    ctx.lineCap = this.edgeLineCap;
+    for(var i in this.edges) {
         var edge = this.edges[i];
         this.drawEdge(ctx, edge);
     }
@@ -113,13 +115,12 @@ Graph.prototype.drawEdge = function(ctx, edge) {
         return;
     }
     
-    ctx.lineWidth = this.edgeWidth + Math.abs(edge.valence * this.edgeVariance);
-
+    ctx.save();   
     ctx.beginPath();
     if (edge.valence < this.neutralValence) {     
         // if any inner points
         if (edge.innerPoints && edge.innerPoints.length > 0) {
-            var pts = edge.innerPoints;           
+            var pts = edge.innerPoints;
             ctx.dashedLineTo(this.scaleX(from.dim.x), this.scaleY(from.dim.y), this.scaleX(pts[0].x), this.scaleY(pts[0].y), this.dashedPattern);
             for (var i = 0; i < pts.length - 1; i++) {
                 ctx.dashedLineTo(this.scaleX(pts[i].x), this.scaleY(pts[i].y), this.scaleX(pts[i+1].x), this.scaleY(pts[i+1].y), this.dashedPattern);
@@ -142,23 +143,21 @@ Graph.prototype.drawEdge = function(ctx, edge) {
         }
     }
     
-    ctx.save();
+    ctx.lineWidth = this.edgeWidth + Math.abs(edge.valence * this.edgeVariance);    
     if (edge.selected) {
         ctx.strokeStyle = edge.theme['line']['focused'];
         ctx.shadowBlur = parseInt(this.theme.edgeGlowSize);
         ctx.shadowColor = edge.theme['glow']['focused'];
-        ctx.stroke();
     } else if (this.hoverObject == edge) {
         ctx.strokeStyle = edge.theme['line']['hover'];
         ctx.shadowBlur = parseInt(this.theme.edgeGlowSize);
         ctx.shadowColor = edge.theme['glow']['hover'];
-        ctx.stroke();
     } else {
         ctx.strokeStyle = edge.theme['line']['normal'];
         ctx.shadowBlur = 0;
         ctx.shadowColor = edge.theme['glow']['normal'];
-        ctx.stroke();
     }
+    ctx.stroke();
     ctx.restore();
 }
 
@@ -168,35 +167,37 @@ Graph.prototype.drawEdge = function(ctx, edge) {
 **/
 function drawRect(ctx) {
     ctx.beginPath();
-    var xOffset = this.dim.width/2;
-    var yOffset = this.dim.height/2;
-    ctx.moveTo(g.scaleX(this.dim.x - xOffset), g.scaleY(this.dim.y - yOffset)); 
-    ctx.lineTo(g.scaleX(this.dim.x + xOffset), g.scaleY(this.dim.y - yOffset)); 
-    ctx.lineTo(g.scaleX(this.dim.x + xOffset), g.scaleY(this.dim.y + yOffset)); 
-    ctx.lineTo(g.scaleX(this.dim.x - xOffset), g.scaleY(this.dim.y + yOffset)); 
+    
+    var dim = this.dim;
+    var xOffset = dim.width/2;
+    var yOffset = dim.height/2;
+    ctx.moveTo(g.scaleX(dim.x - xOffset), g.scaleY(dim.y - yOffset)); 
+    ctx.lineTo(g.scaleX(dim.x + xOffset), g.scaleY(dim.y - yOffset)); 
+    ctx.lineTo(g.scaleX(dim.x + xOffset), g.scaleY(dim.y + yOffset)); 
+    ctx.lineTo(g.scaleX(dim.x - xOffset), g.scaleY(dim.y + yOffset)); 
     ctx.closePath();
 }
 
-function drawOval(ctx) {
-    // Code from http://www.html5canvastutorials.com/tutorials/html5-canvas-ovals/
-    var controlRectWidth = this.dim.width * 1.2;
+function drawOval(ctx) {    
  
     ctx.beginPath();
     
+    var dim = this.dim;
+    var controlRectWidth = dim.width * 1.2;
     var xOffset = controlRectWidth/2;
-    var yOffset = this.dim.height/2;
+    var yOffset = dim.height/2;
     
-    ctx.moveTo(g.scaleX(this.dim.x), g.scaleY(this.dim.y - this.dim.height/2));
+    ctx.moveTo(g.scaleX(dim.x), g.scaleY(dim.y - dim.height/2));
     
     // draw left side of oval
-    ctx.bezierCurveTo(g.scaleX(this.dim.x - xOffset), g.scaleY(this.dim.y - yOffset),
-                      g.scaleX(this.dim.x - xOffset), g.scaleY(this.dim.y + yOffset),
-                      g.scaleX(this.dim.x),           g.scaleY(this.dim.y + yOffset));
+    ctx.bezierCurveTo(g.scaleX(dim.x - xOffset), g.scaleY(dim.y - yOffset),
+                      g.scaleX(dim.x - xOffset), g.scaleY(dim.y + yOffset),
+                      g.scaleX(dim.x),           g.scaleY(dim.y + yOffset));
  
     // draw right side of oval
-    ctx.bezierCurveTo(g.scaleX(this.dim.x + xOffset), g.scaleY(this.dim.y + yOffset),
-                      g.scaleX(this.dim.x + xOffset), g.scaleY(this.dim.y - yOffset),
-                      g.scaleX(this.dim.x),           g.scaleY(this.dim.y - yOffset));
+    ctx.bezierCurveTo(g.scaleX(dim.x + xOffset), g.scaleY(dim.y + yOffset),
+                      g.scaleX(dim.x + xOffset), g.scaleY(dim.y - yOffset),
+                      g.scaleX(dim.x),           g.scaleY(dim.y - yOffset));
     
     ctx.closePath();
 }
@@ -204,16 +205,17 @@ function drawOval(ctx) {
 function drawHex(ctx) {
     ctx.beginPath();
     
-    var xOffset = this.dim.width/2;
-    var yOffset = this.dim.height/2;
+    var dim = this.dim;
+    var xOffset = dim.width/2;
+    var yOffset = dim.height/2;
     
-    ctx.moveTo(g.scaleX(this.dim.x - g.hexOffset*xOffset), g.scaleY(this.dim.y - yOffset));
-    ctx.lineTo(g.scaleX(this.dim.x + g.hexOffset*xOffset), g.scaleY(this.dim.y - yOffset));
-    ctx.lineTo(g.scaleX(this.dim.x + xOffset), g.scaleY(this.dim.y));
-    ctx.lineTo(g.scaleX(this.dim.x + g.hexOffset*xOffset), g.scaleY(this.dim.y + yOffset));
-    ctx.lineTo(g.scaleX(this.dim.x - g.hexOffset*xOffset), g.scaleY(this.dim.y + yOffset));
-    ctx.lineTo(g.scaleX(this.dim.x - xOffset), g.scaleY(this.dim.y)); 
-    ctx.lineTo(g.scaleX(this.dim.x - g.hexOffset*xOffset), g.scaleY(this.dim.y - yOffset));
+    ctx.moveTo(g.scaleX(dim.x - g.hexOffset*xOffset), g.scaleY(dim.y - yOffset));
+    ctx.lineTo(g.scaleX(dim.x + g.hexOffset*xOffset), g.scaleY(dim.y - yOffset));
+    ctx.lineTo(g.scaleX(dim.x + xOffset), g.scaleY(dim.y));
+    ctx.lineTo(g.scaleX(dim.x + g.hexOffset*xOffset), g.scaleY(dim.y + yOffset));
+    ctx.lineTo(g.scaleX(dim.x - g.hexOffset*xOffset), g.scaleY(dim.y + yOffset));
+    ctx.lineTo(g.scaleX(dim.x - xOffset), g.scaleY(dim.y)); 
+    ctx.lineTo(g.scaleX(dim.x - g.hexOffset*xOffset), g.scaleY(dim.y - yOffset));
     
     ctx.closePath();
 }
@@ -226,26 +228,28 @@ Graph.prototype.drawSelectionHandles = function(ctx, node) {
     this.handleContext = ctx;
 
     var saveFillStyle = ctx.fillStyle;
-    var xOffset = node.dim.width/2;
-    var yOffset = node.dim.height/2;
+    
+    var dim = node.dim;
+    var xOffset = dim.width/2;
+    var yOffset = dim.height/2;
     var hOffset = this.handleSize/2;
     
     ctx.fillStyle = this.theme.nodeSelectionHandles;
-    ctx.fillRect(this.scaleX(node.dim.x - xOffset) - hOffset, 
-                this.scaleY(node.dim.y - yOffset) - hOffset,
-                this.handleSize, this.handleSize);
+    ctx.fillRect(this.scaleX(dim.x - xOffset) - hOffset, 
+                 this.scaleY(dim.y - yOffset) - hOffset,
+                 this.handleSize, this.handleSize);
     
-    ctx.fillRect(this.scaleX(node.dim.x + xOffset) - hOffset, 
-                this.scaleY(node.dim.y - yOffset) - hOffset,
-                this.handleSize, this.handleSize);
+    ctx.fillRect(this.scaleX(dim.x + xOffset) - hOffset, 
+                 this.scaleY(dim.y - yOffset) - hOffset,
+                 this.handleSize, this.handleSize);
                 
-    ctx.fillRect(this.scaleX(node.dim.x - xOffset) - hOffset, 
-                this.scaleY(node.dim.y + yOffset) - hOffset,
-                this.handleSize, this.handleSize);
+    ctx.fillRect(this.scaleX(dim.x - xOffset) - hOffset, 
+                 this.scaleY(dim.y + yOffset) - hOffset,
+                 this.handleSize, this.handleSize);
                 
-    ctx.fillRect(this.scaleX(node.dim.x + xOffset) - hOffset, 
-                this.scaleY(node.dim.y + yOffset) - hOffset,
-                this.handleSize, this.handleSize);
+    ctx.fillRect(this.scaleX(dim.x + xOffset) - hOffset, 
+                 this.scaleY(dim.y + yOffset) - hOffset,
+                 this.handleSize, this.handleSize);
                 
     ctx.fillStyle = saveFillStyle;
 }
@@ -258,14 +262,11 @@ Graph.prototype.drawText = function(ctx, node) {
     var lines = this.getTextLines(ctx, node);
     var textWidth = this.lengthOfLongestLine(ctx, lines);
     
-    // Create the initial font size and then scale by node size
-    var fontSize = parseInt(this.theme.nodeFontSize) * this.zoomScale;
-    
+    // Create the initial font size and then scale by node size    
     var increaseX = node.dim.width * this.textWidthInNode / 1.5 / textWidth;
-    var increaseY = node.dim.height * this.textHeightInNode / fontSize;
+    var increaseY = node.dim.height * this.textHeightInNode / this.theme.nodeFontSize;
     
-    fontSize = Math.floor(fontSize * Math.min(increaseX, increaseY));
-    
+    var fontSize = Math.round(this.theme.nodeFontSize * Math.min(increaseX, increaseY) * this.zoomScale);
     var style = fontSize + 'px ' + this.theme.nodeFontFamily;
     if (Math.abs(node.valence) > this.strongThreshold) {
         style = "bold " + style;
@@ -281,8 +282,15 @@ Graph.prototype.drawText = function(ctx, node) {
     var x = this.scaleX(node.dim.x);
     var y = this.scaleY(node.dim.y);
     
-    // Centre everything vertically based on line height
-    var startY = y - lines.length * fontSize / 2;
+    // Centre everything vertically based on line height (font offset works differently in Firefox!!)
+    // BUGBUG - The first line should be offset slightly more
+    var startY = y - (lines.length - 1) * fontSize / 2;
+    if (navigator.userAgent.indexOf("Firefox") != -1) {
+        startY -= 0.5 * fontSize;
+    } else {
+        startY -= 0.75 * fontSize;
+    }
+    
     for (var i = 0; i < lines.length; i++) {
         if (lines[i] != '') {
             ctx.fillText(lines[i], x, startY + fontSize * i);
@@ -314,14 +322,30 @@ Graph.prototype.createImage = function(thumb) {
         canvasCopy.width = thumbX;
         canvasCopy.height = thumbY;
         
+        var oldZoom = this.zoomScale;
+                
+        while ((sourceWidth > thumbX || sourceHeight > thumbY) && this.zoomScale > 0.1) {
+            this.zoomScale -= 0.1;
+            bounds = this.getBounds();
+            sourceWidth = bounds.right - bounds.left + 20;
+            sourceHeight = bounds.bottom - bounds.top + 20;
+        }
+        
+        // Make sure the proportions are integers
         sourceWidth = Math.round(sourceWidth + thumbX * (Math.ceil(sourceWidth / thumbX) - sourceWidth / thumbX));
         sourceHeight = Math.round(sourceHeight + thumbY * (Math.ceil(sourceHeight / thumbY) - sourceHeight / thumbY));
+        
+        // Now make sure proportions are the same
+        var proportionDiff = sourceWidth / thumbX - sourceHeight / thumbY;
+        sourceWidth -= proportionDiff < 0 ? proportionDiff * thumbX : 0;
+        sourceHeight += proportionDiff > 0 ? proportionDiff * thumbY : 0;
         
         // Draw the CAM on a full canvas
         var tempCanvas = document.createElement("canvas");
         tempCanvas.width = sourceWidth;
         tempCanvas.height = sourceHeight;
         this.draw(tempCanvas.getContext("2d"), (tempCanvas.width - bounds.left - bounds.right) / 2, (tempCanvas.height - bounds.top - bounds.bottom) / 2);
+        this.zoomScale = oldZoom;
         
         contextCopy.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, canvasCopy.width, canvasCopy.height);
     } else { 
@@ -330,7 +354,7 @@ Graph.prototype.createImage = function(thumb) {
         canvasCopy.height = sourceHeight;
         
         // Draw the CAM
-        this.draw(canvasCopy.getContext("2d"), (canvasCopy.width  - bounds.left - bounds.right) / 2, (canvasCopy.height - bounds.top - bounds.bottom) / 2);
+        this.draw(contextCopy, (canvasCopy.width  - bounds.left - bounds.right) / 2, (canvasCopy.height - bounds.top - bounds.bottom) / 2);
     }
 
     return canvasCopy.toDataURL("image/png");
@@ -404,13 +428,15 @@ Graph.prototype.getBounds = function() {
 
 /**
     A utility function for proper scaling of shapes and edges.
+    
+    Implements the Hack bitwise shift rounding http://www.html5rocks.com/en/tutorials/canvas/performance/.
 **/
 Graph.prototype.scaleX = function(x) {
-    return x * this.zoomScale + this.originX;
+    return (0.5 + x * this.zoomScale + this.originX) << 0;
 }
 
 Graph.prototype.scaleY = function(y) {
-    return y * this.zoomScale + this.originY;
+    return (0.5 + y * this.zoomScale + this.originY) << 0;
 }
 
 Graph.prototype.unscaleX = function(x) {

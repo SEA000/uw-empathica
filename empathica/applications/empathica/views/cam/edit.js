@@ -296,6 +296,8 @@ $(window).bind('resize', function () {
     g.repaint();
 });
 
+$("body").css('overflow', 'hidden');
+
 var gg = new Graph();
 g.initGraphFromDB();
 $("#btnSelect").toolbarButton('toggle');

@@ -70,53 +70,67 @@ Graph.prototype.circleLayout = function() {
     this.repaint();
 }
 
-/**
-    Position the screen at the geometric centre of the Nodes in the Graph
-**/ 
-Graph.prototype.centreGraph = function() {
-    // For undo
-    var oldValues = {};
-    var newValues = {};
-    
+/** 
+    Computes the theoretical centre of the CAM.
+**/
+Graph.prototype.computeGraphCentre = function() {
     // Calculate the theoretical center of the CAM
     var dx = 0;
     var dy = 0;
     var nodeCount = 0;
-    for (var nid in this.nodes) {
-        nodeCount++;
-        var n = this.nodes[nid];
-        dx -= n.dim.x;
-        dy -= n.dim.y;
-        oldValues[nid] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
+    for (var nid in this.nodes) {        
+        var node = this.nodes[nid];
+        dx += node.dim.x;
+        dy += node.dim.y;
+        nodeCount += 1;
     }
     if (nodeCount != 0) {
         dx /= nodeCount;
         dy /= nodeCount;
     }
+    return [dx, dy];
+}
+
+/**
+    Position the screen at the geometric centre of the Nodes in the Graph
+**/ 
+Graph.prototype.centreGraph = function() {
+    var center = this.computeGraphCentre();
+
+    // For undo
+    var oldValues = { 'nodes': {}, 'edges': {} };
+    var newValues = { 'nodes': {}, 'edges': {} };
     
     // Move components so that the graph origin and theoretical origin coincide
     for (var nid in this.nodes) {
-        var n = this.nodes[nid];
-        n.dim.x += dx;
-        n.dim.y += dy;
-        newValues[nid] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
+        var node = this.nodes[nid];
+        oldValues['nodes'][nid] = jQuery.extend(true, {}, node.dim);
+        node.dim.x -= center[0];
+        node.dim.y -= center[1];
+        newValues['nodes'][nid] = jQuery.extend(true, {}, node.dim);
     }
     
     // Adjust complex edge positions
     for (var eid in this.edges) {
         var edge = this.edges[eid];
-        if (edge.innerPoints) {
+        if (edge.innerPoints && edge.innerPoints.length > 0) {
+            oldValues['edges'][eid] = [];
+            newValues['edges'][eid] = [];
             for (var i = 0; i < edge.innerPoints.length; i += 1) {
                 var point = edge.innerPoints[i];
-                point.x += dx;
-                point.y += dy;
+                oldValues['edges'][eid].push(new Point(point.x, point.y));
+                point.x -= center[0];
+                point.y -= center[1];
+                newValues['edges'][eid].push(new Point(point.x, point.y));
             }
         }
     }
     
     // Update the graph origin
+    oldValues['origin'] = { 'x' : this.originX, 'y' : this.originY };
     this.originX = this.canvas.width / 2;
     this.originY = this.canvas.height / 2;
+    newValues['origin'] = { 'x' : this.originX, 'y' : this.originY };
     
     // Push the changes to undo
     this.pushToUndo(new Command(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues));
@@ -190,6 +204,10 @@ Graph.prototype.moveSelectedNodes = function(selection, offsetX, offsetY) {
 **/
 Graph.prototype.moveOrigin = function(offsetX, offsetY) {
  
+    // Hide control elements
+    this.hideValenceSelector();
+    this.hideTextEditor();
+ 
     var oldOrigin = {'x' : this.originX, 'y' : this.originY}; 
     this.originX += offsetX / this.zoomScale;
     this.originY += offsetY / this.zoomScale;
@@ -197,6 +215,9 @@ Graph.prototype.moveOrigin = function(offsetX, offsetY) {
     
     // Add to undo
     g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, oldOrigin, newOrigin));
+    
+    // Show the valence selector if appropriate
+    this.showValenceSelector();
     
     // Repaint the graph
     this.repaint();

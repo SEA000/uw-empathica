@@ -21,8 +21,11 @@ Graph.prototype.pushToUndo = function(cmd) {
         }
     } else if (cmd.property == this.cmdLayout) {
         // If a layout command, then add all of its constituents to the hash
-        for (var id in cmd.newValue) {
-            this.cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue[id]);
+        for (var id in cmd.newValue['nodes']) {
+            this.cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue['nodes'][id]);
+        }
+        for (var id in cmd.newValue['edges']) {
+            this.cmdHash.addToHash(this.cmdEdge, id, this.cmdInnerPoints, cmd.newValue['edges'][id]);
         }
         this.cmdHash.addToHash(this.cmdNode, "", this.cmdGraphMove, { 'x' : g.originX, 'y': g.originY });
     } else {
@@ -96,7 +99,15 @@ Graph.prototype.undo = function() {
         return;
     }
     
-    if (cmd.objType == this.cmdNode) {
+    if (cmd.property == this.cmdLayout) {
+        for (var nid in cmd.oldValue['nodes']) {
+            this.hadleNodeCommandUndo(nid, this.cmdDim, cmd.oldValue['nodes'][nid]);
+        }
+        for (var eid in cmd.oldValue['edges']) {
+            this.hadleEdgeCommandUndo(eid, this.cmdInnerPoints, cmd.oldValue['edges'][eid]);
+        }
+        this.hadleNodeCommandUndo("", this.cmdGraphMove, cmd.oldValue['origin']);
+    } else if (cmd.objType == this.cmdNode) {
         this.hadleNodeCommandUndo(cmd.objId, cmd.property, cmd.oldValue);
     } else if (cmd.objType == this.cmdEdge) {
         this.hadleEdgeCommandUndo(cmd.objId, cmd.property, cmd.oldValue);
@@ -127,7 +138,10 @@ Graph.prototype.hadleNodeCommandUndo = function(nid, property, oldValue) {
             this.positionSlider(node);
         }
     } else if (property == this.cmdValence) {
-        node.valence = oldValue;
+        node.setValence(oldValue);
+        if (this.selectedObject == node) {
+            this.showValenceSelector(node);
+        }
     } else if (property == this.cmdNodePlaceholder) {
         // NO-op
     } else if (property == this.cmdAddDB) {
@@ -147,16 +161,12 @@ Graph.prototype.hadleNodeCommandUndo = function(nid, property, oldValue) {
         for (var eid in oldValue['edges']) {
             this.edges[eid] = oldValue['edges'][eid];
         }
-    } else if (property == this.cmdLayout) {
-        for (var nid in oldValue) {
-            this.nodes[nid].dim = oldValue[nid];
-        }
     } else if (property == this.cmdGraphMove) {
         this.originX = oldValue['x'];
         this.originY = oldValue['y'];
     } else {
         debugOut("Cannot undo. Unknown node property.");
-        debugOut(cmd);
+        debugOut(property);
     }
 }
 
@@ -168,17 +178,22 @@ Graph.prototype.hadleEdgeCommandUndo = function(eid, property, oldValue) {
     var edge = this.edges[eid];
     
     if (property == this.cmdValence) {
-        edge.valence = oldValue;
+        edge.setValence(oldValue);
+        if (this.selectedObject == edge) {
+            this.showValenceSelector(edge);
+        }
     } else if (property == this.cmdAddDB) {
         // Delete from database
         this.db_deleteEdge(this.edges[eid]);
         this.edges[eid].newEdge = true;
         this.deleteEdge(eid);
+    } else if (property == this.cmdInnerPoints) {
+        edge.innerPoints = oldValue;
     } else if (property == this.cmdDeleteDB) {
         // Re-add the deleted edge
         this.edges[eid] = oldValue;
     }  else {
         debugOut("Cannot undo. Unknown edge property.");
-        debugOut(cmd);
+        debugOut(property);
     }
 }

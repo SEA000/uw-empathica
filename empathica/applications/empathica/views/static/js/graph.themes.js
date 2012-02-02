@@ -19,7 +19,7 @@ var THEMES = {
         themeName:                      "Default Theme",
         
         nodeFontFamily:                 "Verdana",
-        nodeFontSize:                   "14px",
+        nodeFontSize:                   14,
         nodeFontLineHeight:             "20px",
         nodeGlowDirX:                   "1px",
         nodeGlowDirY:                   "1px",
@@ -194,7 +194,7 @@ var THEMES = {
         themeName:                      "Monochrome Theme",
         
         nodeFontFamily:                 "Verdana",
-        nodeFontSize:                   "14px",
+        nodeFontSize:                   14,
         nodeFontLineHeight:             "20px",
         nodeGlowDirX:                   "1px",
         nodeGlowDirY:                   "1px",
@@ -209,8 +209,8 @@ var THEMES = {
         positiveNode: {
             fill: {
                 normal:                 "rgba(255,255,255,255)",
-                hover:                  "rgba(245,245,245,255)",
-                focused:                "rgba(245,245,245,255)"
+                hover:                  "rgba(235,235,235,255)",
+                focused:                "rgba(235,235,235,255)"
             },
             
             line: {
@@ -241,8 +241,8 @@ var THEMES = {
         neutralNode: {
             fill: {
                 normal:                 "rgba(255,255,255,255)",
-                hover:                  "rgba(245,245,245,255)",
-                focused:                "rgba(245,245,245,255)"
+                hover:                  "rgba(235,235,235,255)",
+                focused:                "rgba(235,235,235,255)"
             },
             
             line: {
@@ -273,8 +273,8 @@ var THEMES = {
         negativeNode: {
             fill: {
                 normal:                 "rgba(255,255,255,255)",
-                hover:                  "rgba(245,245,245,255)",
-                focused:                "rgba(245,245,245,255)"
+                hover:                  "rgba(235,235,235,255)",
+                focused:                "rgba(235,235,235,255)"
             },
             
             line: {
@@ -369,7 +369,7 @@ var THEMES = {
         themeName:                      "Alternative Colour",
         
         nodeFontFamily:                 "'Lucida Sans Unicode', 'Lucida Grande', Verdana, sans-serif",
-        nodeFontSize:                   "14px",
+        nodeFontSize:                   14,
         nodeFontLineHeight:             "20px",
         nodeGlowDirX:                   "1px",
         nodeGlowDirY:                   "1px",
@@ -512,7 +512,7 @@ var THEMES = {
         // Connections        
         positiveEdge: {
             line: {
-                normal:                 "rgba(51,51,51,255)",
+                normal:                 "rgba(0,0,0,255)",
                 hover:                  "rgba(0,0,0,255)",
                 focused:                "rgba(0,0,0,255)"
             },
@@ -527,8 +527,8 @@ var THEMES = {
         negativeEdge: {
             line: {
                 normal:                 "rgba(0,0,0,255)",
-                hover:                  "rgba(0,255,0,255)",
-                focused:                "rgba(0,255,0,255)"
+                hover:                  "rgba(0,0,0,255)",
+                focused:                "rgba(0,0,0,255)"
             },
             
             glow: {

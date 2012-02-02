@@ -64,7 +64,7 @@ function Graph() {
     this.edgeWidth = 1.5;
     this.edgeVariance = 2.0;
     this.edgeLineCap = "square";
-    this.dashedPattern = new Array(2,10); // Used to determine line/blank interval. See canvasExtension.js
+    this.dashedPattern = [2, 8]; // Used to determine line/blank interval. See canvasExtension.js
     this.edgePadding = 12;   // pixels on either side of an edge to be used for edge picking
     this.newEdgeColour = "rgba(128,128,128,255)";
     this.newEdgeWidth = 1.5;
@@ -104,7 +104,7 @@ function Graph() {
     // Graph selection handling
     this.selectedObject = new Object();
     this.selection = [];
-    this.hoverObject = new Object();
+    this.hoverObject = null;
     this.possibleDeselect = new Object();   // This is used if there are multiple nodes selected and the 
                                             // the user (while holding shift) clicks on one of the nodes in 
                                             // order to drag the selected set. Unless the motion includes a drag
@@ -211,8 +211,8 @@ function Graph() {
     this.hideValenceSelector();
     
     // Setting up the canvas
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight - 1;
+    this.canvas.width = window.innerWidth - 2;
+    this.canvas.height = window.innerHeight - 3;
     this.ctx.lineCap = this.edgeLineCap;
     
     g = this;
@@ -223,7 +223,12 @@ function Graph() {
 **/
 function Node (id, text, nodeValence) {
     this.id = id;
-    this.text = text;    
+    this.text = text;
+
+    // Do not allow null text
+    if(this.text == null) {
+        this.text = "";
+    }
     
     this.dim = {};
     this.special = "";
@@ -445,12 +450,23 @@ Graph.prototype.addEdge = function(id1, id2, v, inPts) {
     Changes the text of a node by id.
 **/
 Graph.prototype.setNodeText = function(node, newText) {
-    if (!(node instanceof Node)) {
+    if (!(node instanceof Node) || newText == null) {
         return;
     }
     
-    this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdText, node.text, newText));
-    node.text = newText;    
+    // Filter out duplicate spaces, so that we do not get empty words later (space split)
+    var words = newText.split(' ');
+    var textSoFar = "";
+    for (var i = 0; i < words.length; i += 1) {
+        var word = jQuery.trim(words[i]);
+        if (word != "") {
+            textSoFar += word + " ";
+        }
+    }
+    textSoFar = jQuery.trim(textSoFar);
+    
+    this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdText, node.text, textSoFar));
+    node.text = textSoFar;
     
     this.repaint();
 }
@@ -465,20 +481,17 @@ Graph.prototype.deleteNode = function(id) {
     }
     
     var deletingNewNode = node.newNode;
-    
     if (this.selectedObject.id == node.id) {
         this.selectedObject = {};
     }
     
-    var oldValue = {};
-    
     // Copy    
     var dead = new Node(node.id, node.text, node.valence);
     dead.newNode = node.newNode;
-    dead.dim = { 'x': node.dim.x, 'y': node.dim.y, 'width': node.dim.width, 'height': node.dim.height };
+    dead.dim = jQuery.extend(true, {}, node.dim);
+    dead.setSpecial(node.special);
     
-    oldValue['dead'] = dead;
-    oldValue['edges'] = {};
+    var oldValue = { 'dead' : dead, 'edges' : {} };
     
     // Remove the node from the drawOrder queue
     for(var i = 0; i < this.drawOrder.length; i++) {
@@ -669,15 +682,12 @@ Graph.prototype.lengthOfLongestLine = function(ctx, lineArray) {
     Split node text into lines by node width.
 **/
 Graph.prototype.getTextLines = function(ctx, node) {
-    if (node.text == null) {
-        return new Array();
-    }
     
     var words = node.text.split(' ');
     var arr = new Array();
     var lineSoFar = "";
     
-    var style = this.theme.nodeFontSize + ' ' + this.theme.nodeFontFamily;
+    var style = this.theme.nodeFontSize + 'px ' + this.theme.nodeFontFamily;
     if (Math.abs(node.valence) > this.strongThreshold) {
         style = "bold " + style;
     }
@@ -686,8 +696,8 @@ Graph.prototype.getTextLines = function(ctx, node) {
     
     var length = node.dim.width * this.textWidthInNode;
     var lineWidth = 0;
-    for (var i = 0; i < words.length; i++) {
-        var word = words[i];        
+    for (var i = 0; i < words.length; i += 1) {
+        var word = words[i];
         lineWidth = ctx.measureText(lineSoFar + " " + word).width;
         
         if (lineWidth < length) {
@@ -763,6 +773,7 @@ Graph.prototype.getObjectUnderPointer = function(mx, my) {
     Checks whether a resize handle has been clicked.
 **/
 Graph.prototype.isClickOnHandle = function(x, y) {
+
     var imgData = this.ctx.getImageData(x, y, 1, 1);
     var pix = imgData.data;
 
@@ -983,10 +994,11 @@ Graph.prototype.showValenceSelector = function(obj, mx, my) {
             return;
         }
     }
-        
+    
     if (obj instanceof Node) {
         // Only show the valence selector for non-special nodes
         if (obj.special != "") {
+            this.hideValenceSelector();
             return;
         }
     
@@ -1177,22 +1189,42 @@ Graph.prototype.clearSelection = function() {
     Zooms in on the CAM.
 **/
 Graph.prototype.zoomIn = function() {
-    this.zoom(0.05);
+    this.zoom(0.1, this.canvas.width / 2, this.canvas.height / 2);
 }
 
 /**
     Zooms out from the CAM.
 **/
 Graph.prototype.zoomOut = function() {
-    this.zoom(-0.05);
+    this.zoom(-0.1, this.canvas.width / 2, this.canvas.height / 2);
 }
 
 /**
     Performs a zoom operation.
 **/
-Graph.prototype.zoom = function(zoomBy) {
+Graph.prototype.zoom = function(zoomBy, x, y) {
+
+    var oldZoom = this.zoomScale;
+
     this.zoomScale = Math.min(Math.max(this.zoomScale + zoomBy, this.maxZoomOut), this.maxZoomIn);
     this.zoomScale = Math.round(this.zoomScale * Math.pow(10, 2)) / Math.pow(10, 2);
+
+    var zoomDiff = oldZoom - this.zoomScale;
+    if (zoomDiff == 0) {
+        return;
+    }
+    
+    if (zoomDiff > 0) {
+        // If we are zooming out, the point is irrelevant and we simply need to decay the zoom offset
+        var scaler = Math.min(1, zoomBy / (this.maxZoomOut - oldZoom));
+        var c = this.computeGraphCentre();
+        this.originX -= (this.originX - this.canvas.width / 2 + c[0]) * scaler;
+        this.originY -= (this.originY - this.canvas.height / 2 + c[1]) * scaler;
+    } else {
+        // Update the zoom offset
+        this.originX += zoomDiff * this.unscaleX(x);
+        this.originY += zoomDiff * this.unscaleY(y);
+    }
     
     // Hide interaction components
     this.hideValenceSelector();

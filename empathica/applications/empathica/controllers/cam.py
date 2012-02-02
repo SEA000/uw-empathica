@@ -126,7 +126,7 @@ def set_graph_data(map_id, nodes, edges, origin):
         for token, edge in edges_to_add.items():
             start = node_ids[edge['from']]
             end = node_ids[edge['to']]
-            points = edge['innerPoints'].__repr__()
+            points = json.dumps(edge['innerPoints'])
             connection_id = db.Connection.insert(id_first_node = start, id_second_node = end, valence = edge['valence'], inner_points = points, id_map = map_id)
             edge_ids[token] = connection_id
         
@@ -173,6 +173,8 @@ def save_hash(map_id, hash):
                 for property, newValue in properties.items():
                     if property == 'cmdValence':
                         db_edit_connection_valence(map_id, edge_id, newValue)
+                    elif property == 'cmdInnerPoints':
+                        db_edit_connection_innerPoints(map_id, edge_id, json.dumps(newValue))
             else:   # don't care about other property updates - just do a delete
                 db_remove_connection(map_id, edge_id)
     
@@ -427,8 +429,15 @@ def db_edit_connection_valence(map_id, edge_id, valence):
     '''
     Changes the valence of a given edge.
     '''
-    db.Connection[edge_id] = dict(valence=valence)
+    db.Connection[edge_id] = dict(valence = valence)
     db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+    
+def db_edit_connection_innerPoints(map_id, edge_id, innerPoints):
+    '''
+    Changes the valence of a given edge.
+    '''
+    db.Connection[edge_id] = dict(inner_points = innerPoints)
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)    
 
 def db_remove_connection(map_id, edge_id):
     '''
