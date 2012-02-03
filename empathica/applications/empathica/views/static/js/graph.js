@@ -44,6 +44,8 @@ function Graph() {
       \_________________/
     */
     this.hexOffset = 0.6; 
+    this.defaultNodeWidth = 100;
+    this.defaultNodeHeight = 60;
     
     // Special node types
     this.ambivalent = "ambivalent";
@@ -65,7 +67,7 @@ function Graph() {
     this.edgeVariance = 2.0;
     this.edgeLineCap = "square";
     this.dashedPattern = [2, 8]; // Used to determine line/blank interval. See canvasExtension.js
-    this.edgePadding = 12;   // pixels on either side of an edge to be used for edge picking
+    this.edgePadding = 12;       // pixels on either side of an edge to be used for edge picking
     this.newEdgeColour = "rgba(128,128,128,255)";
     this.newEdgeWidth = 1.5;
     
@@ -87,7 +89,7 @@ function Graph() {
     this.textAlign = "center";
     this.textBaseline = "top";
     this.strongThreshold = 0.8;  // if Math.abs(node.valence) exceeds this threshold make the text bold
-    this.textWidthInNode = 0.6;  // How much of the width of a node can be occupied by text (on auto-resize)
+    this.textWidthInNode = 0.8;  // How much of the width of a node can be occupied by text (on auto-resize)
     this.textHeightInNode = 0.8; // How much of the height of a node can be occupied by text (on auto-resize)
     this.nodeWidthIncrease = 1.2; // Interval by which a node gets wider on auto-resize
     
@@ -188,6 +190,8 @@ function Graph() {
     this.originY = 0;
     this.maxZoomOut = 1;
     this.maxZoomIn = 5;
+    this.fontIncreaseDivider = 50;
+    this.fontIncreaseStep = 4;
     
     // Initialize event listeners
     this.initEventListeners();
@@ -214,6 +218,11 @@ function Graph() {
     this.canvas.width = window.innerWidth - 2;
     this.canvas.height = window.innerHeight - 3;
     this.ctx.lineCap = this.edgeLineCap;
+    
+    // Setting up the settings array
+    this.settings = { 'theme' : '{{=cam.theme}}',
+                      'showTitle' : '{{=cam.show_title or True}}' == 'True',
+                      'fixedFont' : '{{=cam.fixed_font or False}}' == 'True'};
     
     g = this;
 }
@@ -616,8 +625,8 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
     
     // reset node width and height
     var oldDim = node.dim;
-    node.dim.width = 100 / this.zoomScale;
-    node.dim.height = 60 / this.zoomScale;
+    node.dim.width = this.defaultNodeWidth / this.zoomScale;
+    node.dim.height = this.defaultNodeHeight / this.zoomScale;
     
     // continue resizing node until it fits
     var lineArray = new Array();
@@ -626,8 +635,12 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
     var increaseWidth = true;
     var count = 0;
     
-    while (count < 30) {        
-        lineArray = this.getTextLines(ctx, node);
+    // Set default font style for measurement purposes    
+    ctx.save();
+    ctx.font = this.setFont(node, this.theme.nodeFontSize);
+    
+    while (count < 30) {  
+        lineArray = this.getTextLines(ctx, node);        
         
         var textWidth = this.lengthOfLongestLine(ctx, lineArray) * this.textWidthInNode;
         var textHeight = lineArray.length * parseInt(this.theme.nodeFontLineHeight);
@@ -661,6 +674,8 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
         this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdDim, oldDim, node.dim));
     }
     
+    ctx.restore();
+    
     return lineArray;
 }
 
@@ -687,19 +702,11 @@ Graph.prototype.getTextLines = function(ctx, node) {
     var arr = new Array();
     var lineSoFar = "";
     
-    var style = this.theme.nodeFontSize + 'px ' + this.theme.nodeFontFamily;
-    if (Math.abs(node.valence) > this.strongThreshold) {
-        style = "bold " + style;
-    }
-    
-    ctx.fontStyle = style;
-    
-    var length = node.dim.width * this.textWidthInNode;
+    var length = node.dim.width * this.zoomScale * this.textWidthInNode;
     var lineWidth = 0;
     for (var i = 0; i < words.length; i += 1) {
         var word = words[i];
-        lineWidth = ctx.measureText(lineSoFar + " " + word).width;
-        
+        lineWidth = ctx.measureText(lineSoFar + " " + word).width;        
         if (lineWidth < length) {
             if (lineSoFar != "") {
                 lineSoFar += " ";
@@ -717,9 +724,20 @@ Graph.prototype.getTextLines = function(ctx, node) {
             arr.push(lineSoFar);
             break;
         }
-    }
+    }    
     
     return arr;
+}
+
+/**
+    Utility function for setting canvas font style based on node valence.
+**/
+Graph.prototype.setFont = function(node, size) {
+    var style = size + 'px ' + this.theme.nodeFontFamily;
+    if (Math.abs(node.valence) > this.strongThreshold) {
+        style = "bold " + style;
+    }
+    return style;
 }
 
 /**

@@ -1,3 +1,8 @@
+/* Graph object
+*******************************************************************************/
+
+var gg = new Graph();
+
 /* Toolbar
 *******************************************************************************/
 
@@ -201,19 +206,34 @@ $("#btnDone").click(function() {
 /* Properties Modal
 *******************************************************************************/
 
-var showTitle = {{=cam.show_title or 'true'}};
+// Update UI state based on the CAM settings
+for (var id in THEMES) {
+    if (THEMES[id].themeName == g.settings['theme']) {
+        $("#theme").val(id);
+        debugOut(id);
+        break;
+    }
+}
+setChecked("#showTitle", g.settings['showTitle']);
+setChecked("#fixedFont", g.settings['fixedFont']);
 
-if (showTitle) {
-    $("#conflict-title,#cam-title").show();
-    $("#showTitle").attr('checked',true);
-    $("#showTitle").siblings(".cb-enable").addClass('selected');
-} else {
-    $("#conflict-title,#cam-title").hide();
-    $("#showTitle").removeAttr('checked');
-    $("#showTitle").siblings(".cb-disable").addClass('selected');
+$("#conflict-title,#cam-title")[g.settings['showTitle'] ? 'show' : 'hide']();
+
+// Utility function to set checkbox state
+function setChecked(component, state) {
+    if (state) {
+        $(component).attr('checked', true);
+        $(component).siblings(".cb-enable").addClass('selected');
+    } else {
+        $(component).removeAttr('checked');
+        $(component).siblings(".cb-disable").addClass('selected');
+    }
 }
 
-var theme = '{{=cam.theme}}';
+// Check if a checkbox is checked
+function isChecked(component) {
+    return $(component).is(":checked");
+}
 
 $.extend($.modal.defaults, {
     containerId: 'modal-container',
@@ -238,14 +258,10 @@ $.extend($.modal.defaults, {
 $("#btnApply")
     .click(function() {
         $("#btnApply").blur();           // Hack to reset button state
-        var showTitle = $("#showTitle").is(":checked");
-        if (showTitle) {
-            $("#conflict-title,#cam-title").show();
-        } else {
-            $("#conflict-title,#cam-title").hide();
-        }
-        var theme = $("#theme").val();
-        g.setTheme(THEMES[theme]);
+        $("#conflict-title,#cam-title")[isChecked("#showTitle") ? 'show' : 'hide']();
+        g.applySettings({'theme' :     $("#theme").val(), 
+                         'showTitle' : isChecked("#showTitle"), 
+                         'fixedFont' : isChecked("#fixedFont")});
         $.modal.close();
     });
 
@@ -298,7 +314,6 @@ $(window).bind('resize', function () {
 
 $("body").css('overflow', 'hidden');
 
-var gg = new Graph();
 g.initGraphFromDB();
 $("#btnSelect").toolbarButton('toggle');
 getSuggestions();

@@ -39,8 +39,8 @@ Graph.prototype.saveGraph = function(redirect) {
 }
 
 /**
-    Set the colour scheme of the graph. For a list of available themes, 
-    consult graph.themes.js
+    Update the colour scheme of the graph. For a list of available themes, 
+    consult graph.themes.js.
 **/
 Graph.prototype.setTheme = function(newTheme) {
     this.theme = newTheme;
@@ -55,7 +55,16 @@ Graph.prototype.setTheme = function(newTheme) {
         this.edges[eid].updateTheme();
     }
     
-    this.db_saveTheme();
+    this.repaint();
+}
+
+/**
+    Applies the graph settings.
+**/
+Graph.prototype.applySettings = function(settings) {
+    this.setTheme(THEMES[settings['theme']]);
+    this.settings = settings;
+    this.db_saveSettings();
     this.repaint();
 }
 

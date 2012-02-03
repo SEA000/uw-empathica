@@ -19,10 +19,8 @@ def edit():
         group = db.GroupPerspective[cam.id_group]
         conflict = db.Conflict[group.id_conflict]
         response.title = "Edit - " + conflict.title
-        client_id = str(random.random())
-        channel_token = 'invalid'
                        
-        return dict(channel_token = channel_token, cam = cam, conflictid = conflict.id, conflict = conflict)
+        return dict(cam = cam, conflictid = conflict.id, conflict = conflict)
     else:
         raise HTTP(400)
 
@@ -262,25 +260,13 @@ def set_png(map_id):
         return dict(success=False)
 
 @service.json
-def set_theme(map_id, theme):
+def save_settings(map_id, theme, settings):
     '''
     Keep track of the user's selected theme.
     '''
     if(auth.has_permission('update', db.Map, map_id)):
-        theme = request.vars.theme
-        db.Map[map_id] = dict(theme = theme)
-        return dict(success=True)
-    else:
-        return dict(success=False)
-        
-@service.json
-def set_show_title(map_id, show_title):
-    '''
-    Save whether the user wants the title of the CAM to be shown or not.
-    '''
-    if(auth.has_permission('update', db.Map, map_id)):
-        theme = request.vars.theme
-        db.Map[map_id] = dict(show_title = show_title)
+        settings = json.loads(settings)
+        db.Map[map_id] = dict(theme = theme, show_title = settings['showTitle'], fixed_font = settings['fixedFont'])
         return dict(success=True)
     else:
         return dict(success=False)

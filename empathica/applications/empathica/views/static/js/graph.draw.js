@@ -258,22 +258,19 @@ Graph.prototype.drawSelectionHandles = function(ctx, node) {
     Fill in the text of a node centred horizontally and vertically in the node
 **/
 Graph.prototype.drawText = function(ctx, node) {
-
-    var lines = this.getTextLines(ctx, node);
-    var textWidth = this.lengthOfLongestLine(ctx, lines);
     
-    // Create the initial font size and then scale by node size    
-    var increaseX = node.dim.width * this.textWidthInNode / 1.5 / textWidth;
-    var increaseY = node.dim.height * this.textHeightInNode / this.theme.nodeFontSize;
-    
-    var fontSize = Math.round(this.theme.nodeFontSize * Math.min(increaseX, increaseY) * this.zoomScale);
-    var style = fontSize + 'px ' + this.theme.nodeFontFamily;
-    if (Math.abs(node.valence) > this.strongThreshold) {
-        style = "bold " + style;
-    }    
+    var fontSize;
+    if (!this.settings['fixedFont']) {
+        // Linearly adjust the font sizes for nodes differing from the standard node size
+        var increaseX = Math.round((node.dim.width - this.defaultNodeWidth) / this.fontIncreaseDivider) * this.fontIncreaseStep;
+        var increaseY = Math.round((node.dim.height - this.defaultNodeHeight) / this.fontIncreaseDivider) * this.fontIncreaseStep;
+        fontSize = Math.round((this.theme.nodeFontSize + Math.min(increaseX, increaseY)) * this.zoomScale);
+    } else {
+        fontSize = this.theme.nodeFontSize;
+    }
     
     ctx.save();
-    ctx.font = style;
+    ctx.font = this.setFont(node, fontSize);
     ctx.textAlign = this.textAlign;
     ctx.textBaseline = this.textBaseline;
     ctx.fillStyle = ( node.selected ? node.theme['font']['focused'] : node.theme['font']['normal'] );
@@ -281,6 +278,21 @@ Graph.prototype.drawText = function(ctx, node) {
     // determine x and y - want to centre the text in the node 
     var x = this.scaleX(node.dim.x);
     var y = this.scaleY(node.dim.y);
+    
+    // Get the lines partitioning based on the preset font style
+    var lines = this.getTextLines(ctx, node);
+    
+    // Compute the new font height and width
+    var textWidth = this.lengthOfLongestLine(ctx, lines);
+    var textHeight = lines.length * fontSize;
+    var xThreshold = 0.8 * node.dim.width * this.zoomScale;
+    var yThreshold = node.dim.height * this.zoomScale;
+    
+    // If they exceed the scaled node boundaries, need to resize the font
+    if (textWidth > xThreshold || textHeight > yThreshold) {
+        fontSize *= Math.min(xThreshold / textWidth, yThreshold / textHeight);
+        ctx.font = this.setFont(node, fontSize);
+    }
     
     // Centre everything vertically based on line height (font offset works differently in Firefox!!)
     // BUGBUG - The first line should be offset slightly more

@@ -97,6 +97,7 @@ db.define_table('Map',
         Field('thumbnail', 'blob'),
         Field('imgdata', 'blob'),
         Field('show_title', 'string', default = "true"),
+        Field('fixed_font', 'string', default = "false"),
         Field('theme', 'string', default = "Default Theme"),
         Field('originX', 'double', default = 0),
         Field('originY', 'double', default = 0))

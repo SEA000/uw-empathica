@@ -196,6 +196,7 @@ Graph.prototype.db_getGraphData = function() {
                     }
                 } else {
                     g.setTheme(THEMES.DEFAULT);
+                    g.db_saveSettings();
                 }
             
                 // Create nodes
@@ -354,18 +355,19 @@ Graph.prototype.db_saveImage = function(imgdata, isThumbnail) {
 }
 
 /**
-    Save current theme to the DB
+    Save current CAM settings to the DB
 **/
-Graph.prototype.db_saveTheme = function() {
+Graph.prototype.db_saveSettings = function() {
     
-    var url = "{{=URL('call/json/set_theme')}}";
+    var url = "{{=URL('call/json/save_settings')}}";
     
     this.incrementPendingSaves();
     $.post(
         url,
         {   
             map_id:         g.mapID, 
-            theme:          g.theme.themeName
+            theme:          g.theme.themeName,
+            settings:       JSON.stringify(g.settings)
         }, function(data) {
             if (g.db_validate_response(data)) {
                 debugOut("Save theme success!");
