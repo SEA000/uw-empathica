@@ -289,7 +289,7 @@ Graph.prototype.drawText = function(ctx, node) {
     var yThreshold = node.dim.height * this.zoomScale;
     
     // If they exceed the scaled node boundaries, need to resize the font
-    if (textWidth > xThreshold || textHeight > yThreshold) {
+    if (!this.settings['fixedFont'] && (textWidth > xThreshold || textHeight > yThreshold)) {
         fontSize *= Math.min(xThreshold / textWidth, yThreshold / textHeight);
         ctx.font = this.setFont(node, fontSize);
     }
