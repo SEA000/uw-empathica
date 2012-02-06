@@ -79,7 +79,7 @@ Graph.prototype.computeGraphCentre = function() {
     var dy = 0;
     var nodeCount = 0;
     for (var nid in this.nodes) {        
-        var node = this.nodes[nid];
+        var node = this.nodes[nid];        
         dx += node.dim.x;
         dy += node.dim.y;
         nodeCount += 1;
@@ -96,7 +96,7 @@ Graph.prototype.computeGraphCentre = function() {
 **/ 
 Graph.prototype.centreGraph = function() {
     var center = this.computeGraphCentre();
-
+    
     // For undo
     var oldValues = { 'nodes': {}, 'edges': {} };
     var newValues = { 'nodes': {}, 'edges': {} };

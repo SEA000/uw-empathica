@@ -318,7 +318,7 @@ def HOTCO_export():
         for row in db(db.Connection.id_map == map_id).select():
             start = db.Node[row.id_first_node].name.replace(' ', '_')
             end = db.Node[row.id_second_node].name.replace(' ', '_')
-            data.append('\t(associate %s %s %0.2f)\n' % (start, end, row.valence * 3 ))
+            data.append('\t(associate \'%s \'%s %0.2f)\n' % (start, end, row.valence * 3 ))
             
         data.append('\n')
         data.append('\t(make-competition)\n')
@@ -334,12 +334,12 @@ def HOTCO_export():
         data.append('\n')
         data.append('; Node value associations:\n')  
         for node in db(db.Node.id_map == map_id).select():
-            data.append('\t(associate %s good %0.2f)\n' % (node.name, node.valence * 3 ))
+            data.append('\t(associate \'%s \'good %0.2f)\n' % (node.name.replace(' ', '_'), node.valence * 3 ))
         
         data.append('\n')  
         data.append('\t(eval-cohere)\n')
         data.append('\t(pls)\n')
-        data.append('\t(show-valence))\n')
+        data.append('\t(show-valence)\n')
         data.append(')')
         
         data.append('</pre>')

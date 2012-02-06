@@ -1340,13 +1340,10 @@ Graph.prototype.generateGraphFromString = function(saveText) {
     for (var nid in save.nodes) {
         var record = save.nodes[nid];
         
-        var node = new Node(guid(), record.text, record.valence);
-        node.dim.x = record.dim.x;
-        node.dim.y = record.dim.y;
-        node.dim.width = record.dim.width;
-        node.dim.height = record.dim.height;
+        var node = new Node(guid(), record.text, record.valence);        
+        node.dim = jQuery.extend(true, {}, record.dim)
         node.setSpecial(record.special);
-        
+                
         // Add to control structures
         this.nodes[node.id] = node;
         this.drawOrder.push(node.id);
