@@ -4,6 +4,7 @@ CAM Documentation
 import logging
 import urllib
 import random
+import re
 from datetime import datetime
 
 import gluon.contrib.simplejson as json
@@ -297,7 +298,12 @@ def HOTCO_export():
         group_id = db.Map[map_id].id_group
         conflict_id = db.GroupPerspective[group_id].id_conflict
         
-        title = db.Conflict[conflict_id].title.replace(' ', '_')
+        # Auxiliary function for removing potentially problematic characters
+        def remove_restricted(str):
+            res = re.sub("[^A-Za-z0-9_\s]", "", str)
+            return re.sub("\s+", "_", res)
+        
+        title = remove_restricted(db.Conflict[conflict_id].title)
         
         data.append('(defun ' + title + ' ()\n')
 
@@ -311,13 +317,15 @@ def HOTCO_export():
         data.append('\n')
         data.append('; Propositions:\n')
         for node in db(db.Node.id_map == map_id).select():
-            data.append('\t(proposition \'%s \"[%s] node is active.\")\n' % (node.name.replace(' ', '_'), node.name ))
+            label = node.name.replace('\'', '')
+            label = label.replace('\"', '')
+            data.append('\t(proposition \'%s \"[%s] node is active.\")\n' % (remove_restricted(node.name), label))
         
         data.append('\n')
         data.append('; Edges:\n')
         for row in db(db.Connection.id_map == map_id).select():
-            start = db.Node[row.id_first_node].name.replace(' ', '_')
-            end = db.Node[row.id_second_node].name.replace(' ', '_')
+            start = remove_restricted(db.Node[row.id_first_node].name)
+            end = remove_restricted(db.Node[row.id_second_node].name)
             data.append('\t(associate \'%s \'%s %0.2f)\n' % (start, end, row.valence * 3 ))
             
         data.append('\n')
@@ -334,7 +342,7 @@ def HOTCO_export():
         data.append('\n')
         data.append('; Node value associations:\n')  
         for node in db(db.Node.id_map == map_id).select():
-            data.append('\t(associate \'%s \'good %0.2f)\n' % (node.name.replace(' ', '_'), node.valence * 3 ))
+            data.append('\t(associate \'%s \'good %0.2f)\n' % (remove_restricted(node.name), node.valence * 3 ))
         
         data.append('\n')  
         data.append('\t(eval-cohere)\n')
