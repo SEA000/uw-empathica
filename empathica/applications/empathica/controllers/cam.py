@@ -150,19 +150,27 @@ def save_hash(map_id, hash):
         # Get list of node ids 
         for node_id, properties in commands['cmdNode'].items():
             # List of properties to be updated for this node id
-            if 'cmdDeleteDB' not in properties:
+            if 'cmdDeleteDB' in properties:
+                # don't care about other property updates - just do a delete
+                db_remove_node(map_id, node_id)
+            elif 'cmdGraphMove' in properties:
+                # update map origin
+                db.Map[map_id] = dict(originX = newValue['x'], originY = newValue['y'])
+            else:
                 # No node deletion in list
+                updateDict = {}
                 for property, newValue in properties.items():
                     if property == 'cmdValence':
-                        db_edit_node_valence(map_id, node_id, newValue)
+                        updateDict['valence'] = newValue
                     elif property == 'cmdText':
-                        db_rename_node(map_id, node_id, newValue)
+                        updateDict['name'] = newValue
                     elif property == 'cmdDim':
-                        db_edit_node_dim(map_id, node_id, newValue['x'], newValue['y'], newValue['width'], newValue['height'])
-                    elif property == 'cmdGraphMove':
-                        db_save_origin(map_id, newValue)
-            else:   # don't care about other property updates - just do a delete
-                db_remove_node(map_id, node_id)
+                        updateDict['x'] = newValue['x']
+                        updateDict['y'] = newValue['y']
+                        updateDict['width'] = newValue['width']
+                        updateDict['height'] = newValue['height']
+                if len(updateDict) > 0:
+                    db.Node[node_id] = updateDict
     
     # Then save any edge changes
     if 'cmdEdge' in commands:
@@ -173,11 +181,13 @@ def save_hash(map_id, hash):
                 # No edge deletion in list
                 for property, newValue in properties.items():
                     if property == 'cmdValence':
-                        db_edit_connection_valence(map_id, edge_id, newValue)
+                        db.Connection[edge_id] = dict(valence = newValue)
                     elif property == 'cmdInnerPoints':
-                        db_edit_connection_innerPoints(map_id, edge_id, json.dumps(newValue))
+                        db.Connection[edge_id] = dict(inner_points = json.dumps(newValue))
             else:   # don't care about other property updates - just do a delete
                 db_remove_connection(map_id, edge_id)
+    
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
     
     return dict(success=True)
         
@@ -235,7 +245,9 @@ def save_origin(map_id, origin):
         return dict(success=False)
         
     origin = json.loads(origin)        
-    db_save_origin(map_id, origin)
+    db.Map[map_id] = dict(originX = origin['x'], originY = origin['y'])
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+    
     return dict(success=True)        
         
 @service.json
@@ -365,17 +377,11 @@ def HOTCO_export():
             
         return data
     else:
-        raise HTTP(400);
+        raise HTTP(400)
         
 """
 DATABASE FUNCTIONS
 """
-def db_save_origin(map_id, origin):
-    '''
-    Saves the CAM origin.
-    '''
-    db.Map[map_id] = dict(originX = origin['x'], originY = origin['y'])
-    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
         
 def db_add_node(map_id, token, x, y, width, height, name, special):
     '''
@@ -401,27 +407,6 @@ def db_remove_node(map_id, node_id):
         updated_map_info['is_empty'] = True
     db.Map[map_id] = updated_map_info
 
-def db_rename_node(map_id, node_id, name):
-    '''
-    Renames a node.
-    '''
-    db.Node[node_id] = dict(name=name)
-    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-
-def db_edit_node_valence(map_id, node_id, valence):
-    '''
-    Edits the node valence.
-    '''
-    db.Node[node_id] = dict(valence=valence)
-    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-
-def db_edit_node_dim(map_id, node_id, x, y, width, height):
-    '''
-    Edits node dimensions.
-    '''
-    db.Node[node_id] = dict(x = x, y = y, width = width, height = height)
-    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-
 def db_create_connection(map_id, token, node_one_id, node_two_id, valence, inner_points):
     '''
     Creates a new edge in the CAM.
@@ -429,20 +414,6 @@ def db_create_connection(map_id, token, node_one_id, node_two_id, valence, inner
     connection_id = db.Connection.insert(id_first_node=node_one_id, id_second_node=node_two_id, valence=valence, inner_points=inner_points, id_map=map_id)
     db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
     return connection_id
-
-def db_edit_connection_valence(map_id, edge_id, valence):
-    '''
-    Changes the valence of a given edge.
-    '''
-    db.Connection[edge_id] = dict(valence = valence)
-    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-    
-def db_edit_connection_innerPoints(map_id, edge_id, innerPoints):
-    '''
-    Changes the valence of a given edge.
-    '''
-    db.Connection[edge_id] = dict(inner_points = innerPoints)
-    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)    
 
 def db_remove_connection(map_id, edge_id):
     '''

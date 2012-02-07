@@ -563,16 +563,15 @@ def call():
     session.forget()
     return service()
 
-
 @service.json
 def edit_conflict(conflict_id, title, description):
-    if(auth.has_permission('update', db.Conflict, conflict_id) == false):
+    if not auth.has_permission('update', db.Conflict, conflict_id):
         db.rollback()
         return dict(success=False)
-    else:
-        db.Conflict[conflict_id] = dict(title=title, description=description)
-        db.commit()
-        return dict(success=True)
+    
+    db.Conflict[conflict_id] = dict(title=title, description=description)
+    db.commit()
+    return dict(success=True)
 
 @service.json
 def close_conflict(id):
@@ -583,12 +582,12 @@ def close_conflict(id):
         - id:
             The database id of the conflict to close
     """
-    if(auth.has_permission('update', db.Conflict, id)):
-        db.Conflict[id] = dict(open_conflict=False)
-        db.commit()
-        return dict(success=True)
-    else:    
+    if not auth.has_permission('update', db.Conflict, id):
         return dict(success=False)
+        
+    db.Conflict[id] = dict(open_conflict=False)
+    db.commit()
+    return dict(success=True)
 
 @service.json
 def delete_conflict(id):
