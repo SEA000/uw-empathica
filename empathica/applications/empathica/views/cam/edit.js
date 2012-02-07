@@ -45,6 +45,7 @@ var addSuggestion = function(id, name) {
     suggestions[id] = name;
 }
 
+var lastSuggestionsUpdate = 0;
 var getSuggestions = function() {
     // If we have enough suggestions, simply do nothing
     if (getSuggestionCount() >= 3) {
@@ -55,16 +56,26 @@ var getSuggestions = function() {
     // Else request more suggestions
     $.getJSON(
         "{{=URL('call/json/get_suggestions')}}",
-        {'map_id': {{=cam.id}}},
+        {
+            'map_id': {{=cam.id}},
+            'timestamp': lastSuggestionsUpdate
+        },
         function(data) {
-            if (!data.success) { return false; }
-            $.each(data.suggestions, function(i,suggestion) {
-                addSuggestion(suggestion[0], suggestion[1]);
-            });
-            $("#suggestions > ul").center();
-            if (getSuggestionCount() > 0) {
-                $("#suggestions").stop(true,true).slideDown(300);
+            // Ensure the server returned success
+            if (data.success) {
+                // Update UI
+                $.each(data.suggestions, function(i,suggestion) {
+                    addSuggestion(suggestion[0], suggestion[1]);
+                });                
+            
+                // Update the last check time
+                lastSuggestionsUpdate = data.last_timestamp;            
             }
+            
+            if (getSuggestionCount() > 0) {
+                $("#suggestions > ul").center();
+                $("#suggestions").stop(true,true).slideDown(300);
+            } 
         }
     );
 }
@@ -106,10 +117,10 @@ $("#canvasDiv").droppable({
         if (e.pageY < 84) { return false; }
         
         var id = -1;
+        var text = ui.draggable.text();
         for (var s in suggestions) {
-            if (suggestions[s] == ui.draggable.text()) {
+            if (suggestions[s] == text) {
                 id = s;
-                debugOut('Adding: ' + id);
                 break;
             }
         }
@@ -119,10 +130,13 @@ $("#canvasDiv").droppable({
             return;
         }
         
+        // Remove the node from suggestions
+        delete suggestions[id];
+        
         var coords = g.getCursorPosition(e);
         var mx = coords[0];
         var my = coords[1];
-        g.addSuggestedNode(id, ui.draggable.text(), mx, my);
+        g.addSuggestedNode(id, text, mx, my);
         
         // Remove from list
         ui.draggable.remove();
