@@ -70,18 +70,12 @@ Graph.prototype.removeFromUndoById = function(nid) {
 }
 
 Graph.prototype.saveChanges = function() {
-    // Save thumbnail 
-    var thumb = this.createImage(true);
-    this.db_saveImage(thumb, true); 
-    
-    // Save full-size
-    var img = this.createImage(false);
-    this.db_saveImage(img, false);
-    
+
     // Save the command hash
-    var hash = this.cmdHash.hash;
-    //debugOut(JSON.stringify(hash));
-    this.db_saveHash(hash);
+    var hash = this.cmdHash.hash;    
+    var thumb = this.createImage(true);
+    var img = this.createImage(false);
+    this.db_save(hash, thumb, img);
     
     // Reset the hash contents
     this.cmdHash.reset();

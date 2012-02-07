@@ -5,12 +5,20 @@ import logging
 import urllib
 import random
 import re
+import hashlib
 
 from datetime import datetime
 from time import mktime
 
 import gluon.contrib.simplejson as json
 
+def get_update_hash(map_id, user_id):
+    s = str(map_id) + ' ' + str(user_id) + ' update' 
+    return hashlib.sha256(s).hexdigest()
+
+def can_update(map_id, user_id, hash):
+    return hash == get_update_hash(map_id, user_id)
+    
 @auth.requires_login()
 def edit():
     '''
@@ -21,9 +29,8 @@ def edit():
         cam = db.Map[map_id]
         group = db.GroupPerspective[cam.id_group]
         conflict = db.Conflict[group.id_conflict]
-        response.title = "Edit - " + conflict.title
-                       
-        return dict(cam = cam, conflictid = conflict.id, conflict = conflict)
+        response.title = "Edit - " + conflict.title        
+        return dict(cam = cam, conflictid = conflict.id, conflict = conflict, can_update = get_update_hash(map_id, auth.user.id))
     else:
         raise HTTP(400)
 
@@ -78,73 +85,72 @@ def get_graph_data(map_id):
     '''
     Parse through and return all the map information.
     '''
-    if(auth.has_permission('read', db.Map, map_id)):
-        cam = db.Map[map_id]
-        nodes = {}
-        edges = {}
-        
-        for row in db(db.Connection.id_map == map_id).select():
-            edges[row.id] = { 'id': row.id, 'valence': row.valence, 'inner_points': row.inner_points, 'from': row.id_first_node, 'to': row.id_second_node }
-            
-        for node in db(db.Node.id_map == map_id).select():
-            nodes[node.id] = { 'id': node.id, 'text': node.name, 'valence': node.valence, 'dim': { 'x': node.x, 'y': node.y, 'width' : node.width, 'height' : node.height }, 'special' : node.special}
-            
-        mapdata = {
-                'mapid' : map_id,
-                'nodes' : nodes,
-                'edges' : edges,
-                'theme' : cam.theme,
-                'origin': {'x' : cam.originX, 'y' : cam.originY}
-        }
-        return dict(success=True, mapdata=mapdata)
-    else:
+    if not auth.has_permission('read', db.Map, map_id):
         return dict(success=False)
+        
+    cam = db.Map[map_id]
+    nodes = {}
+    edges = {}
+    
+    for row in db(db.Connection.id_map == map_id).select():
+        edges[row.id] = { 'id': row.id, 'valence': row.valence, 'inner_points': row.inner_points, 'from': row.id_first_node, 'to': row.id_second_node }
+        
+    for node in db(db.Node.id_map == map_id).select():
+        nodes[node.id] = { 'id': node.id, 'text': node.name, 'valence': node.valence, 'dim': { 'x': node.x, 'y': node.y, 'width' : node.width, 'height' : node.height }, 'special' : node.special}
+        
+    mapdata = {
+            'mapid' : map_id,
+            'nodes' : nodes,
+            'edges' : edges,
+            'theme' : cam.theme,
+            'origin': {'x' : cam.originX, 'y' : cam.originY}
+    }
+    return dict(success=True, mapdata=mapdata)
 
 @service.json
-def set_graph_data(map_id, nodes, edges, origin):
+def set_graph_data(map_id, hash, nodes, edges, origin):
     '''
     Set the graph data based on the incoming node and edge strings.
     '''
-    if(auth.has_permission('update', db.Map, map_id)):
-        
-        # Delete old nodes and edges
-        db(db.Node.id_map == map_id).delete()
-        db(db.Connection.id_map == map_id).delete()
-    
-        # Parse the input data
-        nodes_to_add = json.loads(nodes)
-        edges_to_add = json.loads(edges)
-        origin = json.loads(origin)
-        
-        node_ids = {}
-        edge_ids = {}
-        
-        for token, node in nodes_to_add.items():
-            dim = node['dim']
-            node_id = db.Node.insert(id_map = map_id, valence = node['valence'], x = dim['x'], y = dim['y'], width = dim['width'], height = dim['height'], name = node['text'], special = node['special'])
-            node_ids[token] = node_id
-        
-        for token, edge in edges_to_add.items():
-            start = node_ids[edge['from']]
-            end = node_ids[edge['to']]
-            points = json.dumps(edge['innerPoints'])
-            connection_id = db.Connection.insert(id_first_node = start, id_second_node = end, valence = edge['valence'], inner_points = points, id_map = map_id)
-            edge_ids[token] = connection_id
-        
-        db.Map[map_id] = dict(originX = origin['x'], originY = origin['y'])
-        db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
-        
-        return dict(success=True, node_ids=node_ids, edge_ids=edge_ids)
-    else:
+    if not can_update(map_id, auth.user.id, hash):
         return dict(success=False)
+        
+    # Delete old nodes and edges
+    db(db.Node.id_map == map_id).delete()
+    db(db.Connection.id_map == map_id).delete()
+
+    # Parse the input data
+    nodes_to_add = json.loads(nodes)
+    edges_to_add = json.loads(edges)
+    origin = json.loads(origin)
+    
+    node_ids = {}
+    edge_ids = {}
+    
+    for token, node in nodes_to_add.items():
+        dim = node['dim']
+        node_id = db.Node.insert(id_map = map_id, valence = node['valence'], x = dim['x'], y = dim['y'], width = dim['width'], height = dim['height'], name = node['text'], special = node['special'])
+        node_ids[token] = node_id
+    
+    for token, edge in edges_to_add.items():
+        start = node_ids[edge['from']]
+        end = node_ids[edge['to']]
+        points = json.dumps(edge['innerPoints'])
+        connection_id = db.Connection.insert(id_first_node = start, id_second_node = end, valence = edge['valence'], inner_points = points, id_map = map_id)
+        edge_ids[token] = connection_id
+    
+    db.Map[map_id] = dict(originX = origin['x'], originY = origin['y'])
+    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+    
+    return dict(success=True, node_ids=node_ids, edge_ids=edge_ids)        
 
 @service.json
-def save_hash(map_id, hash):
+def save_hash(map_id, hash, hashedCommands, thumb, img):
 
-    if not auth.has_permission('update', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash):
         return dict(success=False)
 
-    commands = json.loads(hash)
+    commands = json.loads(hashedCommands)
 
     if 'cmdNode' in commands:
         # Get list of node ids 
@@ -155,6 +161,7 @@ def save_hash(map_id, hash):
                 db_remove_node(map_id, node_id)
             elif 'cmdGraphMove' in properties:
                 # update map origin
+                newValue = properties['cmdGraphMove']
                 db.Map[map_id] = dict(originX = newValue['x'], originY = newValue['y'])
             else:
                 # No node deletion in list
@@ -187,61 +194,61 @@ def save_hash(map_id, hash):
             else:   # don't care about other property updates - just do a delete
                 db_remove_connection(map_id, edge_id)
     
-    db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
+    db.Map[map_id] = dict(thumbnail = thumb, imgdata = img, date_modified = datetime.utcnow(), modified_by = auth.user.email)
     
     return dict(success=True)
         
 @service.json
-def add_node(map_id, token, x, y, width, height, name, special):
+def add_node(map_id, hash, token, x, y, width, height, name, special):
     '''
     Adds a node to the database.
     Note: By default set valences to 0 for new nodes.
     '''
-    if not auth.has_permission('update', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash):
         return dict(success=False, token=token)
         
     node_id = db_add_node(map_id, token, x, y, width, height, name, special)
     return dict(success=True, token=token, node_id=node_id)
 
 @service.json
-def remove_node(map_id, node_id):
+def remove_node(map_id, hash, node_id):
     '''
     Removes a node from the database.
     '''
-    if not auth.has_permission('update', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash):
         return dict(success=False)
     
     db_remove_node(map_id, node_id)
     return dict(success=True)
 
 @service.json
-def create_connection(map_id, token, node_one_id, node_two_id, valence, inner_points):
+def create_connection(map_id, hash, token, node_one_id, node_two_id, valence, inner_points):
     '''
     Creates a new edge in the CAM.
     '''
-    if not auth.has_permission('update', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash):
         return dict(success=False)
         
     connection_id = db_create_connection(map_id, token, node_one_id, node_two_id, valence, inner_points)                
     return dict(success=True, node_one=node_one_id, node_two=node_two_id, valence=valence, id=connection_id, token=token)
 
 @service.json
-def remove_connection(map_id, edge_id):
+def remove_connection(map_id, hash, edge_id):
     '''
     Removes and edge from a given CAM.
     '''
-    if not auth.has_permission('update', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash):
         return dict(success=False)
         
     db_remove_connection(map_id, edge_id)
     return dict(success=True)
         
 @service.json
-def save_origin(map_id, origin):
+def save_origin(map_id, hash, origin):
     '''
     Saves the CAM origin.
     '''
-    if not auth.has_permission('update', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash):
         return dict(success=False)
         
     origin = json.loads(origin)        
@@ -249,42 +256,18 @@ def save_origin(map_id, origin):
     db.Map[map_id] = dict(date_modified = datetime.utcnow(), modified_by = auth.user.email)
     
     return dict(success=True)        
-        
-@service.json
-def set_thumbnail(map_id):
-    '''
-    Saves a small image of the CAM for interface purposes.
-    '''
-    imgdata = request.vars.imgdata
-    if(auth.has_permission('update', db.Map, map_id)):
-        db.Map[map_id] = dict(thumbnail = imgdata)
-        return dict(success=True)
-    else:
-        return dict(success=False)
 
 @service.json
-def set_png(map_id):
-    '''
-    Saves the full image of the CAM for future retrieval.
-    '''
-    imgdata = request.vars.imgdata
-    if(auth.has_permission('update', db.Map, map_id)):
-        db.Map[map_id] = dict(imgdata = imgdata)
-        return dict(success=True)
-    else:
-        return dict(success=False)
-
-@service.json
-def save_settings(map_id, theme, settings):
+def save_settings(map_id, hash, theme, settings):
     '''
     Keep track of the user's selected theme.
     '''
-    if(auth.has_permission('update', db.Map, map_id)):
-        settings = json.loads(settings)
-        db.Map[map_id] = dict(theme = theme, show_title = settings['showTitle'], fixed_font = settings['fixedFont'])
-        return dict(success=True)
-    else:
-        return dict(success=False)
+    if not can_update(map_id, auth.user.id, hash):
+        return dict(success=False)  
+        
+    settings = json.loads(settings)
+    db.Map[map_id] = dict(theme = theme, show_title = settings['showTitle'], fixed_font = settings['fixedFont'])
+    return dict(success=True)
  
 @auth.requires_login()
 def download():

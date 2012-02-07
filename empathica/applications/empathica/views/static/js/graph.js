@@ -18,8 +18,8 @@ function Graph() {
     this.textEditor = $('#textEditDiv');
     this.textInput = $('#textEditInput');
     
-    // Disable channels for dev without GAE
     this.mapID = {{=cam.id}};
+    this.hash = "{{=can_update}}";
     
     // Min and max values for node and edge valence values
     this.minValence = -1;

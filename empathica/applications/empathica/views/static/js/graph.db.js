@@ -17,15 +17,18 @@
 /**
     Process a DB save the command hash.
 **/
-Graph.prototype.db_saveHash = function(hash) {
+Graph.prototype.db_save = function(hash, thumb, img) {
     var url = "{{=URL('call/json/save_hash')}}";
     
     this.incrementPendingSaves();
     $.post(
         url,
         {   
-            map_id:     g.mapID, 
-            hash:       JSON.stringify(hash)      
+            map_id:         g.mapID, 
+            hash:           g.hash,
+            hashedCommands: JSON.stringify(hash),
+            thumb:          thumb,
+            img:            img
         }, function(data) {
             if (g.db_validate_response(data)) {
                 debugOut('Command hash successfully saved.');
@@ -54,6 +57,7 @@ Graph.prototype.db_addNode = function(node) {
         url,
         {   
             map_id:     g.mapID, 
+            hash:       g.hash,
             token:      node.id,
             x:          node.dim.x,
             y:          node.dim.y,
@@ -90,6 +94,7 @@ Graph.prototype.db_addEdge = function(edge) {
         url,
         {   
             map_id:         g.mapID, 
+            hash:           g.hash,
             token:          edge.id,
             node_one_id:    edge.from,
             node_two_id:    edge.to, 
@@ -125,6 +130,7 @@ Graph.prototype.db_deleteNode = function(node) {
         url,
         {   
             map_id:         g.mapID,
+            hash:           g.hash,
             node_id:        node.id
         }, function(data) {        
             if (g.db_validate_response(data)) {
@@ -155,6 +161,7 @@ Graph.prototype.db_deleteEdge = function(edge) {
         url,
         {   
             map_id:         g.mapID, 
+            hash:           g.hash,
             edge_id:        edge.id
         }, function(data) {
             if (g.db_validate_response(data)) {
@@ -274,6 +281,7 @@ Graph.prototype.db_setGraphData = function(nodes, edges, origin)
         url,
         {   
             map_id:         g.mapID, 
+            hash:           g.hash,
             nodes:          JSON.stringify(nodes),
             edges:          JSON.stringify(edges),
             origin:         JSON.stringify(origin)
@@ -308,6 +316,7 @@ Graph.prototype.db_saveOrigin = function() {
         url,
         {   
             map_id:         g.mapID, 
+            hash:           g.hash,
             origin:         JSON.stringify({'x': g.originX, 'y': g.originY})
         }, function(data) {
             if (g.db_validate_response(data)) {
@@ -317,39 +326,6 @@ Graph.prototype.db_saveOrigin = function() {
         }
     ).error(function(data) {
         alert('Oops. Empathica failed to save the current CAM origin.');
-        g.decrementPendingSaves();
-    });
-}
-
-/**
-    Save the graph image (either full image or thumbnail) to the DB
-**/ 
-Graph.prototype.db_saveImage = function(imgdata, isThumbnail) {    
-    
-    // Get the JSON url
-    var url = "{{=URL('call/json/set_png')}}";
-    if (isThumbnail) {
-        url = "{{=URL('call/json/set_thumbnail')}}";
-    }
-    
-    this.incrementPendingSaves();
-    $.post(
-        url,
-        {   
-            map_id:         g.mapID,
-            imgdata:        imgdata
-        }, function(data) {
-            if (g.db_validate_response(data)) {
-                if (isThumbnail) {
-                    debugOut("Save thumbnail success!");
-                } else {
-                    debugOut("Save image success!");
-                }
-            }
-            g.decrementPendingSaves();
-        }
-    ).error(function(data) {
-        alert('Oops. Empathica failed store an image representation of your CAM.');
         g.decrementPendingSaves();
     });
 }
@@ -366,6 +342,7 @@ Graph.prototype.db_saveSettings = function() {
         url,
         {   
             map_id:         g.mapID, 
+            hash:           g.hash,
             theme:          g.theme.themeName,
             settings:       JSON.stringify(g.settings)
         }, function(data) {
