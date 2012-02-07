@@ -41,6 +41,7 @@ def get_suggestions(map_id, timestamp):
     conflict = cam.id_group.id_conflict
     groups = db(db.GroupPerspective.id_conflict == conflict.id).select()
     
+    timestamps = []
     for g in groups:
         map = db(db.Map.id_group == g.id).select()
         for m in map:
@@ -51,30 +52,18 @@ def get_suggestions(map_id, timestamp):
             # Make sure cams were updated before quering for nodes
             modified_at = m.date_modified
             last_timestamp = mktime(modified_at.timetuple()) + 1e-6 * modified_at.microsecond
-            if int(timestamp) >= last_timestamp:
+            if float(timestamp) - last_timestamp >= 0:
                 continue
                 
-            nodes = db(db.Node.id_map == m.id).select(limitby = (0, 3))
+            timestamps.append(last_timestamp)
+            nodes = db(db.Node.id_map == m.id).select()
             for n in nodes:
                 suggestions.append((n.id, n.name))
-                if len(suggestions) == 3:
-                    return dict(success=True, suggestions = suggestions, last_timestamp = last_timestamp)
     
     if len(suggestions) > 0:
-        return dict(success = True, suggestions = suggestions, last_timestamp = last_timestamp)
+        return dict(success=True, suggestions = suggestions, timestamps = timestamps)
         
     return dict(success = False)
-
-@service.json
-def ignore_suggestion(map_id, id):
-    '''
-    Notifies the server that the user wants to ignore suggestions.
-    '''
-    # Check perimssion on suggestion listy wherever that is
-    if(auth.has_permission('update', db.Map, map_id)):
-        return dict(success=True)
-    else:
-        return dict(success=False)
 
 @auth.requires_login()
 def call():

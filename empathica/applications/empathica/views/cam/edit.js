@@ -25,11 +25,43 @@ $("#btnDone").toolbarButton({ icon: 6, label: "Done" });
 /* Suggestions
 *******************************************************************************/
 var suggestions = {};
-var addSuggestion = function(id, name) {
-    if (id in suggestions) { return false; }
-    $("#suggestions ul").append(
+var inList = {};
+var ignoreList = [];
+
+var numInList = 0;
+var numSuggestions = 0;
+var maxSuggestionsInList = 3;
+
+var lastSuggestionsUpdate = 0;
+
+/**
+    Shows the suggestion slider.
+**/
+function showSuggestionSlider() {
+    $("#suggestions > ul").center();
+    $("#suggestions").stop(true,true).slideDown(300);
+}
+
+/**
+    Hides the suggestion slider.
+**/
+function hideSuggestionSlider() {
+    $("#suggestions").stop(true,true).slideUp(300);
+}
+
+/**
+    Adds suggestion to the display list.
+**/
+function addSuggestionToList(id, name) {
+    // Make sure we don't duplicate and don't go over
+    if (id in inList || numInList == maxSuggestionsInList) { 
+        return false; 
+    }
+    
+   $("#suggestions ul").append(
         "<li id='suggestion-"+id+"' class='concept'>"+name+"<div id='ignore-"+id+"' class='concept-x tooltip' title='Ignore'><div class='concept-x-icon'></div></div></li>"
     );
+    
     $("#suggestion-"+id).draggable({
         opacity: 0.7,
         helper: "clone",
@@ -40,16 +72,46 @@ var addSuggestion = function(id, name) {
     }).children(":first").click(function() {
         // ignore-x
         var id = $(this).attr('id').split('-').pop();
-        ignoreSuggestion(id);
-    });
-    suggestions[id] = name;
+        ignoreSuggestion(parseInt(id));
+    }); 
+    
+    inList[id] = name;
+    numInList += 1;
+    return true;
 }
 
-var lastSuggestionsUpdate = 0;
-var getSuggestions = function() {
+/**
+    Adds suggestion to the storage array and display list.
+**/
+function addSuggestion(id, name) {
+    // Make sure we don't duplicate and don't repeat the ignore
+    if (id in suggestions || jQuery.inArray(id, ignoreList) != -1) { 
+        return; 
+    }
+    
+    addSuggestionToList(id, name);
+    
+    suggestions[id] = name;
+    numSuggestions += 1;
+}
+
+/**
+    Attempts to fill the display list from either
+    the storage or a json request to server.
+**/
+function getSuggestions() {
     // If we have enough suggestions, simply do nothing
-    if (getSuggestionCount() >= 3) {
-        $("#suggestions").stop(true,true).slideDown(300);
+    if (numInList == maxSuggestionsInList) {
+        showSuggestionSlider();
+        return;
+    }
+    
+    // If we have enough suggestions stored, just add them to the list
+    if (numSuggestions > maxSuggestionsInList - numInList) {
+        for (var id in suggestions) {
+            addSuggestionToList(id, suggestions[id]);
+        }
+        showSuggestionSlider();
         return;
     }
 
@@ -68,34 +130,60 @@ var getSuggestions = function() {
                     addSuggestion(suggestion[0], suggestion[1]);
                 });                
             
-                // Update the last check time
-                lastSuggestionsUpdate = data.last_timestamp;            
+                // Pick out the maximum timestamp
+                lastSuggestionsUpdate = Math.max.apply( Math, data.timestamps );  
             }
             
-            if (getSuggestionCount() > 0) {
-                $("#suggestions > ul").center();
-                $("#suggestions").stop(true,true).slideDown(300);
+            if (numInList > 0) {
+                showSuggestionSlider();
             } 
         }
     );
 }
 
-var ignoreSuggestion = function(id) {
-    $.getJSON(
-        "{{=URL('call/json/ignore_suggestion')}}",
-        {'map_id': {{=cam.id}}, 'id': id},
-        function(data) {
-            if (!data.success) { return false; }
-            $("#suggestion-"+id).fadeOut(300, function() {
-                $(this).remove();
-                if (getSuggestionCount() == 0) {
-                    $("#suggestions").stop(true,true).slideUp(300);
-                }
-            });
-        }
-    );
+/**
+    Deletes the suggestion from the storage array and the display list.
+**/
+function deleteSuggestionFromLists(id) {
+    // Remove from suggestion list
+    delete suggestions[id];
+    numSuggestions -= 1;
+
+    // Remove from display list
+    delete inList[id];
+    numInList -= 1;
 }
 
+/**
+    Handles the ignore click.
+**/
+function ignoreSuggestion(id) {
+    // Delete from lists
+    deleteSuggestionFromLists(id);
+    
+    // Add to ignore list
+    ignoreList.push(id);
+    
+    // Update the UI
+    $("#suggestion-"+id).fadeOut(300, function() {
+        $(this).remove();
+                
+        // Try to fill up suggestion bar
+        for (var id in suggestions) {
+            addSuggestionToList(id, suggestions[id]);
+        }
+        
+        if (numInList == 0) {
+            hideSuggestionSlider();
+        } else {
+            $("#suggestions > ul").center();
+        }
+    });
+}
+
+/**
+    JQuery snippet to center suggestions.
+**/
 jQuery.fn.center = function () {    
     var parent = this;
     setTimeout(function() {
@@ -105,6 +193,9 @@ jQuery.fn.center = function () {
     return this;
 }
 
+/**
+    Utilities for drag and drop.
+**/
 $("#suggestions .concept").draggable({
     opacity: 0.7,
     helper: "clone",
@@ -130,8 +221,8 @@ $("#canvasDiv").droppable({
             return;
         }
         
-        // Remove the node from suggestions
-        delete suggestions[id];
+        // Remove the node from lists
+        deleteSuggestionFromLists(id);
         
         var coords = g.getCursorPosition(e);
         var mx = coords[0];
@@ -149,15 +240,11 @@ $("#canvasDiv,.unselectable").each(function() {
     this.onselectstart = function() { return false; };
 });
 
-var getSuggestionCount = function() {
-    return $("#suggestions").children().children().length; // -1 for label node
-}
-
 /* Buttons
 *******************************************************************************/
 $("#btnSelect").click(function() {
     $("#canvasDiv").css('cursor', 'default');
-    $("#suggestions").stop(true,true).slideUp(300);
+    hideSuggestionSlider();
     g.setState(g.stateDefault);
 });
 
@@ -169,13 +256,13 @@ $("#btnAddConcepts").click(function() {
 
 $("#btnAddConnections").click(function() {
     $("#canvasDiv").css('cursor', 'crosshair');
-    $("#suggestions").stop(true,true).slideUp(300);
+    hideSuggestionSlider();
     g.setState(g.stateAddingEdges);
 });
 
 $("#btnAddAmbivalent").click(function() {
     $("#canvasDiv").css('cursor', 'crosshair');
-    $("#suggestions").stop(true,true).slideUp(300);
+    hideSuggestionSlider();
     g.setState(g.stateAddingSpecial, "ambivalent");
 });
 
