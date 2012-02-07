@@ -37,18 +37,19 @@ def get_suggestions(map_id):
         conflict = cam.id_group.id_conflict
         groups = db(db.GroupPerspective.id_conflict == conflict.id).select()
 
-        maps = []
         for g in groups:
             map = db(db.Map.id_group == g.id).select()
-            maps.extend(map)
-        
-        for m in maps:
-            if m.id != cam.id:
-                nodes = db(db.Node.id_map == m.id).select()
+            for m in map:
+                if m.id == cam.id:
+                    continue
+                    
+                nodes = db(db.Node.id_map == m.id).select(limitby = (0, 3))
                 for n in nodes:
                     suggestions.append((n.id, n.name))
+                    if len(suggestions) == 3:
+                        return dict(success=True, suggestions=suggestions)
                     
-        return dict(success=True, suggestions=suggestions[0:3])
+        return dict(success=True, suggestions=suggestions)
     else:
         return dict(success=False)
 
@@ -304,6 +305,8 @@ def HOTCO_export():
             return re.sub("\s+", "_", res)
         
         title = remove_restricted(db.Conflict[conflict_id].title)
+        relevant_nodes = db(db.Node.id_map == map_id).select(*['name','valence'])
+        relevant_edges = db(db.Connection.id_map == map_id).select(*['id_first_node','id_second_node','valence'])
         
         data.append('(defun ' + title + ' ()\n')
 
@@ -316,17 +319,24 @@ def HOTCO_export():
         
         data.append('\n')
         data.append('; Propositions:\n')
-        for node in db(db.Node.id_map == map_id).select():
+        for node in relevant_nodes:
             label = node.name.replace('\'', '')
             label = label.replace('\"', '')
             data.append('\t(proposition \'%s \"[%s] node is active.\")\n' % (remove_restricted(node.name), label))
         
         data.append('\n')
         data.append('; Edges:\n')
-        for row in db(db.Connection.id_map == map_id).select():
-            start = remove_restricted(db.Node[row.id_first_node].name)
-            end = remove_restricted(db.Node[row.id_second_node].name)
-            data.append('\t(associate \'%s \'%s %0.2f)\n' % (start, end, row.valence * 3 ))
+        
+        cached_node_names = {}
+        def get_node_name(id):
+            if id not in cached_node_names:
+                cached_node_names[id] = remove_restricted(db.Node[id].name)
+            return cached_node_names[id]
+        
+        for edge in relevant_edges:
+            start = get_node_name(edge.id_first_node)
+            end = get_node_name(edge.id_second_node)
+            data.append('\t(associate \'%s \'%s %0.2f)\n' % (start, end, edge.valence * 3))
             
         data.append('\n')
         data.append('\t(make-competition)\n')
@@ -341,8 +351,8 @@ def HOTCO_export():
             
         data.append('\n')
         data.append('; Node value associations:\n')  
-        for node in db(db.Node.id_map == map_id).select():
-            data.append('\t(associate \'%s \'good %0.2f)\n' % (remove_restricted(node.name), node.valence * 3 ))
+        for node in relevant_nodes:
+            data.append('\t(associate \'%s \'good %0.2f)\n' % (remove_restricted(node.name), node.valence * 3))
         
         data.append('\n')  
         data.append('\t(eval-cohere)\n')

@@ -46,6 +46,13 @@ var addSuggestion = function(id, name) {
 }
 
 var getSuggestions = function() {
+    // If we have enough suggestions, simply do nothing
+    if (getSuggestionCount() >= 3) {
+        $("#suggestions").stop(true,true).slideDown(300);
+        return;
+    }
+
+    // Else request more suggestions
     $.getJSON(
         "{{=URL('call/json/get_suggestions')}}",
         {'map_id': {{=cam.id}}},
@@ -55,6 +62,9 @@ var getSuggestions = function() {
                 addSuggestion(suggestion[0], suggestion[1]);
             });
             $("#suggestions > ul").center();
+            if (getSuggestionCount() > 0) {
+                $("#suggestions").stop(true,true).slideDown(300);
+            }
         }
     );
 }
@@ -75,9 +85,12 @@ var ignoreSuggestion = function(id) {
     );
 }
 
-jQuery.fn.center = function () {
-    this.css("position","absolute");
-    this.css("left", ( $(window).width() - this.width() ) / 2+$(window).scrollLeft() + "px");
+jQuery.fn.center = function () {    
+    var parent = this;
+    setTimeout(function() {
+        parent.css("position","absolute");
+        parent.css("left", ( $(window).width() - parent.width() ) / 2+$(window).scrollLeft() + "px");
+    }, 10);
     return this;
 }
 
@@ -123,7 +136,7 @@ $("#canvasDiv,.unselectable").each(function() {
 });
 
 var getSuggestionCount = function() {
-    return $("#suggestions").children().children().length-1; // -1 for label node
+    return $("#suggestions").children().children().length; // -1 for label node
 }
 
 /* Buttons
@@ -137,9 +150,6 @@ $("#btnSelect").click(function() {
 $("#btnAddConcepts").click(function() {
     $("#canvasDiv").css('cursor', 'crosshair');
     getSuggestions();
-    if (getSuggestionCount() > 0) {
-        $("#suggestions").stop(true,true).slideDown(300);
-    }
     g.setState(g.stateAddingNodes);
 });
 
@@ -316,4 +326,3 @@ $("body").css('overflow', 'hidden');
 
 g.initGraphFromDB();
 $("#btnSelect").toolbarButton('toggle');
-getSuggestions();
