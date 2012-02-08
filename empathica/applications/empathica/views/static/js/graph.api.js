@@ -39,7 +39,7 @@ Graph.prototype.saveGraph = function(msg, action) {
     if (action) {
         // If we get a string, redirect
         if (action.substring) {
-            this.redirectOnSave = redirect;
+            this.redirectOnSave = action;
         // Otherwise, must be a callback
         } else {
             action();
