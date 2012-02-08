@@ -31,10 +31,15 @@ Graph.prototype.initGraphFromDB = function() {
     Save Graph data to the database. 
     If a redirect is provided, the page will redirect after saving is completed.
 **/
-Graph.prototype.saveGraph = function(redirect) {
+Graph.prototype.saveGraph = function(msg, redirect) {
+    $.blockUI({
+        message: msg
+    });
+
     if (redirect) {
         this.redirectOnSave = redirect;
     }
+    
     return this.saveChanges();
 }
 

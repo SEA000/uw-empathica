@@ -66,7 +66,7 @@ Graph.prototype.circleLayout = function() {
         coordAngle += angPart;
     }
     
-    this.pushToUndo(new Command(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues));   
+    this.pushToUndo(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues);   
     this.repaint();
 }
 
@@ -133,7 +133,7 @@ Graph.prototype.centreGraph = function() {
     newValues['origin'] = { 'x' : this.originX, 'y' : this.originY };
     
     // Push the changes to undo
-    this.pushToUndo(new Command(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues));
+    this.pushToUndo(this.cmdNode, guid(), this.cmdLayout, oldValues, newValues);
 
     // Show the valence selector if appropriate
     this.showValenceSelector();
@@ -165,7 +165,7 @@ Graph.prototype.moveSingleNode = function(node, offsetX, offsetY) {
     var newDim = jQuery.extend(true, {}, node.dim);
     
     // Add to undo
-    this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdDim, oldDim, newDim));
+    this.pushToUndo(this.cmdNode, node.id, this.cmdDim, oldDim, newDim);
     
     // Reposition the valence selector, if appropriate
     if (this.selectedObject == node) {
@@ -193,7 +193,7 @@ Graph.prototype.moveSelectedNodes = function(selection, offsetX, offsetY) {
     }
     
     // Add to undo
-    g.pushToUndo(new Command(g.cmdMulti, "", g.cmdDim, oldValues, newValues));
+    g.pushToUndo(g.cmdMulti, "multi", g.cmdDim, oldValues, newValues);
     
     // Repaint the graph
     this.repaint();
@@ -214,7 +214,7 @@ Graph.prototype.moveOrigin = function(offsetX, offsetY) {
     var newOrigin = {'x' : this.originX, 'y' : this.originY}; 
     
     // Add to undo
-    g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, oldOrigin, newOrigin));
+    g.pushToUndo(g.cmdNode, "origin", g.cmdGraphMove, oldOrigin, newOrigin);
     
     // Show the valence selector if appropriate
     this.showValenceSelector();
@@ -233,5 +233,5 @@ Graph.prototype.setPosition = function(n, x, y) {
     var newDim = jQuery.extend(true, {}, n.dim);
 
     // Push to undo stack
-    this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdDim, oldDim, newDim));
+    this.pushToUndo(this.cmdNode, n.id, this.cmdDim, oldDim, newDim);
 }

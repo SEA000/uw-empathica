@@ -8,7 +8,8 @@
 /**
     Object representing an operation to be saved to the database
 **/
-function Command (objType, objId, property, oldValue, newValue) {
+function Command (id, objType, objId, property, oldValue, newValue) {
+    this.id = id;
     this.objType = objType;
     this.objId = objId;
     this.property = property;
@@ -48,11 +49,4 @@ CmdHash.prototype.addToHash = function(objType, objId, property, newValue) {
     
     // Add object to hash
     this.hash[objType][objId][property] = newValue;
-}
-
-/**
-    Reset the command hash.
-**/
-CmdHash.prototype.reset = function() {
-    this.hash = {};
 }

@@ -11,6 +11,7 @@ from datetime import datetime
 from time import mktime
 
 import gluon.contrib.simplejson as json
+from gluon.contenttype import contenttype
 
 def get_update_hash(map_id, user_id):
     s = str(map_id) + ' ' + str(user_id) + ' update' 
@@ -18,6 +19,11 @@ def get_update_hash(map_id, user_id):
 
 def can_update(map_id, user_id, hash):
     return hash == get_update_hash(map_id, user_id)
+    
+# Auxiliary function for removing potentially problematic characters
+def remove_restricted(str):
+    res = re.sub("[^A-Za-z0-9_\s]", "", str)
+    return re.sub("\s+", "_", res)    
     
 @auth.requires_login()
 def edit():
@@ -194,7 +200,8 @@ def save_hash(map_id, hash, hashedCommands, thumb, img):
             else:   # don't care about other property updates - just do a delete
                 db_remove_connection(map_id, edge_id)
     
-    db.Map[map_id] = dict(thumbnail = thumb, imgdata = img, date_modified = datetime.utcnow(), modified_by = auth.user.email)
+    # Saves images, clear save code, and update modified time
+    db.Map[map_id] = dict(thumbnail = thumb, imgdata = img, save_string = '', date_modified = datetime.utcnow(), modified_by = auth.user.email)
     
     return dict(success=True)
         
@@ -269,6 +276,25 @@ def save_settings(map_id, hash, theme, settings):
     db.Map[map_id] = dict(theme = theme, show_title = settings['showTitle'], fixed_font = settings['fixedFont'])
     return dict(success=True)
  
+@service.json
+def export(map_id, code):
+    if not auth.has_permission('read', db.Map, map_id):
+        return dict(success=False)
+
+    db.Map[map_id] = dict(save_string = code)
+    return dict(success=True)
+ 
+@auth.requires_login()
+def export_string():
+    map_id = request.args(0)
+    if(auth.has_permission('read', db.Map, map_id)):
+        cam = db.Map[map_id]
+        response.headers['Content-Type'] = contenttype('.txt')
+        response.headers['Content-disposition'] = 'attachment; filename=' + remove_restricted(cam.title) +'.empathica'
+        return cam.save_string
+    else:
+        raise HTTP(400)         
+ 
 @auth.requires_login()
 def download():
     '''
@@ -279,7 +305,7 @@ def download():
         cam = db.Map[map_id]
         return HTML(BODY(IMG(_src=cam.imgdata)))
     else:
-        raise HTTP(400);
+        raise HTTP(400)
         
 @auth.requires_login()
 def HOTCO_export():
@@ -294,11 +320,6 @@ def HOTCO_export():
         
         group_id = db.Map[map_id].id_group
         conflict_id = db.GroupPerspective[group_id].id_conflict
-        
-        # Auxiliary function for removing potentially problematic characters
-        def remove_restricted(str):
-            res = re.sub("[^A-Za-z0-9_\s]", "", str)
-            return re.sub("\s+", "_", res)
         
         title = remove_restricted(db.Conflict[conflict_id].title)
         relevant_nodes = db(db.Node.id_map == map_id).select(*['name','valence'])

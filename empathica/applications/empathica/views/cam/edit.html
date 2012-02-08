@@ -23,7 +23,7 @@
     <script>{{ include 'static/js/graph.layout.js' }}</script>
     <script>{{ include 'static/js/graph.event.js' }}</script>
     <script>{{ include 'static/js/graph.undo.js' }}</script>    
-    <script>{{ include 'static/js/shortcut.js' }}</script>
+    <script>{{ include 'static/js/shortcut.js' }}</script>  
 {{ end #js }}
 
 {{ block onReady }}
@@ -52,6 +52,9 @@
         <li id="btnExport" class="tooltip" title="Export to PNG"></li>
         <li id="btnExportHOTCO" class="tooltip" title="Export to HOTCO"></li>
         <li class="divider"></li>
+        <li id="btnLoadFromFile" class="tooltip" title="Import from File"></li>
+        <li id="btnSaveToFile" class="tooltip" title="Export to File"></li>
+        <li class="divider"></li>
         <li id="btnSettings" class="tooltip" title="Settings"></li>
     </ul>
 {{ end #header-center }}
@@ -73,41 +76,39 @@
         <div id='valenceDiv'>
             <div id='valenceInput'></div>
         </div>
-        <div id="exportForm" class="hidden">
-            <h2 id="modal-header">CAM Export</h2>
-            <div id="modal-form" style="width:500px">
-                <label class="row">
-                    The cryptic string below is a representation of your CAM. <br/><br/>
-                    You could use it to restore your CAM later or you could share it with other Empathica users.
-                </label>
-                <div class="row">
-                    <textarea id="save-text" style="width:495px; height: 200px; margin-top:10px; overflow: auto; font-size: 12px;" readonly="readonly"></textarea>                </div>
-                <div class="row">
-                    <button id="btnSelectAll" class="right">Select All</button>
-                </div>
-            </div>
-        </div>
         <div id="importForm" class="hidden">
             <h2 id="modal-header">CAM Import/Recovery</h2>
             <div id="modal-form" style="width: 500px">
-                <center>
-                    <label class="row">
-                        Copy and paste the cryptic string representation of the imported CAM below:
-                    </label>
-                </center>
+                <label class="row">
+                    Select an EMPATHICA generated CAM file (.empathica, .txt):
+                </label>
+                <div class="row">
+                    <input type="file" id="files" name="file" size="50" />
+                </div>
+            </div>        
+        </div>
+        <div id="importFormFallback" class="hidden">
+            <h2 id="modal-header">CAM Import/Recovery</h2>
+            <div id="modal-form" style="width: 500px">
+                <label class="row">
+                    Unfortunately, your browser does not natively support file import. If you want to upload
+                    directly as a file, try Firefox or Chrome.
+                    <br /><br />
+                    Open the EMPATHICA file, copy everything, and paste below:
+                </label>
                 <div class="row">
                     <textarea id="restore-text" style="width:495px; height: 200px; margin-top:10px; overflow: auto; font-size: 12px;"></textarea>
                 </div>
                 <div class="row">
                     <button id='btnRestore' class="right">Restore</button>
                 </div>
-            </div>
-        </div>
+            </div>            
+        </div>        
     </div>
     <!-- Settings Window  -->
     <div id="winSettings" class="hidden">
         <h2 id="modal-header">Settings</h2>
-        <div id="modal-form" style="width:330px;">
+        <div id="modal-form" style="width:320px;">
             <div class="row">
                 <div class="label">Show Title</div>
                 <div class="input">
@@ -138,14 +139,6 @@
             </div>
             <div class="row">
                 <button id="btnApply" class="right">Apply</button>
-            </div>
-            <div class="clear"></div>
-            <div class="row">
-                <div class="label">CAM Recovery</div>
-            </div>
-            <div class="row">
-                <button id="btnExportToString" class="left">Export CAM</button>
-                <button id="btnImportFromString" class="right">Import from String</button>
             </div>
         </div>
     </div>

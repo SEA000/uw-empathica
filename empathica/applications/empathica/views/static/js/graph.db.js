@@ -370,14 +370,7 @@ Graph.prototype.incrementPendingSaves = function() {
 Graph.prototype.decrementPendingSaves = function() {
     this.pendingSaves -= 1;
     if (this.pendingSaves == 0) {
-        // Clear the "Saving" message from the screen and redirect if necessary
-        $.unblockUI({
-            onUnblock: function() {
-                if (g.redirectOnSave != "") {
-                    location.href = g.redirectOnSave;
-                }
-            }
-        });
+        this.onSaveComplete();
     } 
 }
 

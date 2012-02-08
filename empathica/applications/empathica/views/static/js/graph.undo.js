@@ -9,28 +9,10 @@
 /**
     Push a command onto the undo stack
 **/ 
-Graph.prototype.pushToUndo = function(cmd) {
+Graph.prototype.pushToUndo = function(objType, objId, property, oldValue, newValue) {
     // Add command to the undo stack
-    this.undoStack.push(cmd);
-    
-    // Add command to the save hash
-    if (cmd.objType == this.cmdMulti) {
-        // If a multi command, then add all of its constituents to the hash
-        for (var id in cmd.newValue) {
-            this.cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue[id]);
-        }
-    } else if (cmd.property == this.cmdLayout) {
-        // If a layout command, then add all of its constituents to the hash
-        for (var id in cmd.newValue['nodes']) {
-            this.cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue['nodes'][id]);
-        }
-        for (var id in cmd.newValue['edges']) {
-            this.cmdHash.addToHash(this.cmdEdge, id, this.cmdInnerPoints, cmd.newValue['edges'][id]);
-        }
-        this.cmdHash.addToHash(this.cmdNode, "", this.cmdGraphMove, { 'x' : g.originX, 'y': g.originY });
-    } else {
-        this.cmdHash.addCmd(cmd);
-    }
+    this.undoIdCounter += 1;
+    this.undoStack.push(new Command(this.undoIdCounter, objType, objId, property, oldValue, newValue));
     
     // Keep the save hash from getting too big and save data periodically
     this.numOperations += 1;
@@ -71,14 +53,69 @@ Graph.prototype.removeFromUndoById = function(nid) {
 
 Graph.prototype.saveChanges = function() {
 
+    // Make sure we have stuff to save
+    if (this.undoStack.length == 0) {
+        this.onSaveComplete();
+        return;
+    }
+    
+    // Find index of last save
+    var start = 0;
+    for (var i = 0; i < this.undoStack.length; i += 1) {
+        var cmd = this.undoStack[i];
+        if (cmd.id > this.lastSavedId) {
+            start = i;
+            break;
+        }
+    }
+
+    // Add command to the save hash
+    var cmdHash = new CmdHash();
+    for (var i = start; i < this.undoStack.length; i += 1) {
+        var cmd = this.undoStack[i];
+        if (cmd.objType == this.cmdMulti) {
+            // If a multi command, then add all of its constituents to the hash
+            for (var id in cmd.newValue) {
+                cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue[id]);
+            }
+        } else if (cmd.property == this.cmdLayout) {
+            // If a layout command, then add all of its constituents to the hash
+            for (var id in cmd.newValue['nodes']) {
+                cmdHash.addToHash(this.cmdNode, id, this.cmdDim, cmd.newValue['nodes'][id]);
+            }
+            for (var id in cmd.newValue['edges']) {
+                cmdHash.addToHash(this.cmdEdge, id, this.cmdInnerPoints, cmd.newValue['edges'][id]);
+            }
+            cmdHash.addToHash(this.cmdNode, "", this.cmdGraphMove, { 'x' : g.originX, 'y': g.originY });
+        } else {
+            cmdHash.addCmd(cmd);
+        }
+    }
+    
+    debugOut(cmdHash.hash);
+    
+    // Update the index of last save
+    this.lastSavedId = this.undoStack[this.undoStack.length - 1].id;
+
     // Save the command hash
-    var hash = this.cmdHash.hash;    
+    var hash = cmdHash.hash;
     var thumb = this.createImage(true);
     var img = this.createImage(false);
     this.db_save(hash, thumb, img);
-    
-    // Reset the hash contents
-    this.cmdHash.reset();
+}
+
+/**
+    Save Graph data to the database. 
+    If a redirect is provided, the page will redirect after saving is completed.
+**/
+Graph.prototype.onSaveComplete = function() {
+    $.unblockUI({
+        onUnblock: function() {
+            if (g.redirectOnSave != "") {
+                location.href = g.redirectOnSave;
+            }
+        }
+    });
 }
 
 /**

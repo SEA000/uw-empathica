@@ -154,7 +154,8 @@ function Graph() {
     
     // Undo
     this.undoStack = new Array();
-    this.cmdHash = new CmdHash();
+    this.undoIdCounter = 0;
+    this.lastSavedId = -1;
     this.maxUndoStackSize = 100;
     this.saveThreshold = 60;
     this.numOperations = 0;
@@ -292,6 +293,20 @@ Node.prototype.updateTheme = function() {
     this.theme = g.theme[this.nodeType];
 }
 
+Node.prototype.exportToDict = function() {
+    var dict = {};
+    dict['id'] = this.id;
+    dict['text'] = this.text;
+    dict['valence'] = this.valence;
+    dict['dim'] = {};
+    dict['dim']['x'] = Math.round(this.dim.x * 100)/100;
+    dict['dim']['y'] = Math.round(this.dim.y * 100)/100;
+    dict['dim']['width'] = Math.round(this.dim.width);
+    dict['dim']['height'] = Math.round(this.dim.height);
+    dict['special'] = this.special;
+    return dict;
+}
+
 /**
     Data structure for a graph edge.
 **/
@@ -324,6 +339,15 @@ Edge.prototype.setValence = function(valence) {
 
 Edge.prototype.updateTheme = function() {
     this.theme = g.theme[this.edgeType];
+}
+
+Edge.prototype.exportToDict = function() {
+    var dict = {};
+    dict['from'] = this.from;
+    dict['to'] = this.to;
+    dict['valence'] = this.valence;
+    dict['innerPoints'] = this.innerPoints;
+    return dict;
 }
 
 /**
@@ -388,7 +412,7 @@ Graph.prototype.suggestedNode = function(id, nodeText, nodeValence, x, y) {
     this.setPosition(n, x, y);
     this.setSizeByText(this.ctx, n, true);
         
-    this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdAddSuggested, "", n));
+    this.pushToUndo(this.cmdNode, n.id, this.cmdAddSuggested, "", n);
     g.db_addNode(n);
     
     this.repaint();
@@ -406,7 +430,7 @@ Graph.prototype.addNode = function(nodeText, nodeValence, x, y) {
     var n = new Node(guid(), nodeText, nodeValence);
     
     // Push node to undo stack
-    this.pushToUndo(new Command(this.cmdNode, n.id, this.cmdNodePlaceholder, "", n.id));
+    this.pushToUndo(this.cmdNode, n.id, this.cmdNodePlaceholder, "", n.id);
     
     // Add to control structures
     this.nodes[n.id] = n;
@@ -444,7 +468,7 @@ Graph.prototype.addEdge = function(id1, id2, v, inPts) {
     }
     
     // Add it to the undo stack
-    this.pushToUndo(new Command(this.cmdEdge, e.id, this.cmdNodePlaceholder, "", e.id));
+    this.pushToUndo(this.cmdEdge, e.id, this.cmdNodePlaceholder, "", e.id);
     
     // Insert into datastructures
     this.edges[e.id] = e;
@@ -474,7 +498,7 @@ Graph.prototype.setNodeText = function(node, newText) {
     }
     textSoFar = jQuery.trim(textSoFar);
     
-    this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdText, node.text, textSoFar));
+    this.pushToUndo(this.cmdNode, node.id, this.cmdText, node.text, textSoFar);
     node.text = textSoFar;
     
     this.repaint();
@@ -541,7 +565,7 @@ Graph.prototype.deleteNode = function(id) {
         // instead - delete everything from the undo stack containing this node's guid - it has not been committed yet
         this.removeFromUndoById(id);
     } else {
-        this.pushToUndo(new Command(this.cmdNode, id, this.cmdDeleteDB, oldValue, ""));
+        this.pushToUndo(this.cmdNode, id, this.cmdDeleteDB, oldValue, "");
     }
     
     this.repaint();
@@ -574,7 +598,7 @@ Graph.prototype.deleteEdge = function(id) {
     if (deletingNewEdge) {
         this.removeFromUndoById(id);
     } else {
-        this.pushToUndo(new Command(this.cmdEdge, id, this.cmdDeleteDB, dead, ""));
+        this.pushToUndo(this.cmdEdge, id, this.cmdDeleteDB, dead, "");
     }
     
     this.repaint();
@@ -1077,9 +1101,9 @@ Graph.prototype.sliderStart = function(e, ui) {
 **/
 Graph.prototype.sliderStop = function(e, ui) {
     if (g.selectedObject instanceof Node) {
-        g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdValence, g.valenceOld, g.selectedObject.valence));
+        g.pushToUndo(g.cmdNode, g.selectedObject.id, g.cmdValence, g.valenceOld, g.selectedObject.valence);
     } else if (g.selectedObject instanceof Edge) {
-        g.pushToUndo(new Command(g.cmdEdge, g.selectedObject.id, g.cmdValence, g.valenceOld, g.selectedObject.valence));
+        g.pushToUndo(g.cmdEdge, g.selectedObject.id, g.cmdValence, g.valenceOld, g.selectedObject.valence);
     }
 }
 
@@ -1301,11 +1325,11 @@ Graph.prototype.createSaveString = function() {
     save.edges = {};
     
     for (var nid in this.nodes) {
-        save.nodes[nid] = this.nodes[nid];
+        save.nodes[nid] = this.nodes[nid].exportToDict();
     }
     
     for (var eid in this.edges) {
-        save.edges[eid] = this.edges[eid];
+        save.edges[eid] = this.edges[eid].exportToDict();
     }
 
     return JSON.stringify(save);

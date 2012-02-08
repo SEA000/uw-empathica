@@ -22,10 +22,7 @@ Graph.prototype.initEventListeners = function() {
     var defaultOptions = {'target': window, 'disable_in_input':true};
     
     shortcut.add("Ctrl+S", function() {
-        g.saveGraph();
-        $.blockUI({
-            message: "Saving. Just a moment... ",
-        });
+        g.saveGraph("Saving. Just a moment... ");
     });
     
     shortcut.add("PageUp", function() {
@@ -189,7 +186,7 @@ Graph.prototype.onEndRenaming = function() {
     // Check if naming a new node for the first time
     if (g.selectedObject.newNode) {
         // If new node, then save it in the database
-        g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdAddDB, "", g.selectedObject.id));
+        g.pushToUndo(g.cmdNode, g.selectedObject.id, g.cmdAddDB, "", g.selectedObject.id);
         g.db_addNode(g.selectedObject);
     }
     
@@ -399,17 +396,17 @@ Graph.prototype.eventMouseUp = function(e) {
                 newValues[n.id] = {'x': n.dim.x, 'y': n.dim.y, 'width': n.dim.width, 'height': n.dim.height};
             }
             
-            g.pushToUndo(new Command(g.cmdMulti, "", g.cmdDim, oldValues, newValues));
+            g.pushToUndo(g.cmdMulti, "multi", g.cmdDim, oldValues, newValues);
         } else if (g.selectedObject instanceof Node) {
             var sn = g.selectedObject;
             if (g.oldDim.x != sn.x || g.oldDim.y != sn.y || g.oldDim.width != sn.width || g.oldDim.height != sn.height) {
-                g.pushToUndo(new Command(g.cmdNode, g.selectedObject.id, g.cmdDim, g.oldDim, g.selectedObject.dim));
+                g.pushToUndo(g.cmdNode, g.selectedObject.id, g.cmdDim, g.oldDim, jQuery.extend(true, {}, g.selectedObject.dim));
             }
             g.interactionMode = g.draggingNode;
         } else {
             var oldOrigin = { 'x' : g.originX - g.totalX, 'y': g.originY - g.totalY };
             var newOrigin = { 'x' : g.originX, 'y': g.originY };
-            g.pushToUndo(new Command(g.cmdNode, "", g.cmdGraphMove, oldOrigin, newOrigin));
+            g.pushToUndo(g.cmdNode, "origin", g.cmdGraphMove, oldOrigin, newOrigin);
         }
     }
     
@@ -555,7 +552,7 @@ Graph.prototype.eventMouseDown = function(e) {
                 // add edge
                 edge = g.addEdge(g.addingEdgeFromNode.id, node.id, g.defaultValence, g.pointArray);
                 g.db_addEdge(edge);
-                g.pushToUndo(new Command(g.cmdEdge, edge.id, g.cmdAddDB, "", edge.id));
+                g.pushToUndo(g.cmdEdge, edge.id, g.cmdAddDB, "", edge.id);
             }
             
             // reset state

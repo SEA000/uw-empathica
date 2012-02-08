@@ -11,13 +11,15 @@ $("#btnSelect").toolbarButton({ icon: 0, group: "inputMode" });
 $("#btnAddConcepts").toolbarButton({ icon: 1, group: "inputMode" });
 $("#btnAddConnections").toolbarButton({ icon: 2, group: "inputMode" });
 $("#btnAddAmbivalent").toolbarButton({ icon: 6, group: "inputMode" });
-$("#btnSave").toolbarButton({ icon: 3, group: "inputMode" });
-$("#btnExport").toolbarButton({ icon: 4 });
-$("#btnExportHOTCO").toolbarButton({ icon: 5 });
 $("#btnZoomIn").toolbarButton({ icon: 7 });
 $("#btnZoomOut").toolbarButton({ icon: 8 });
 $("#btnZoomFit").toolbarButton({ icon: 9 });
-$("#btnSettings").toolbarButton({ icon: 10 });
+$("#btnSave").toolbarButton({ icon: 3, group: "inputMode" });
+$("#btnExport").toolbarButton({ icon: 4 });
+$("#btnExportHOTCO").toolbarButton({ icon: 5 });
+$("#btnLoadFromFile").toolbarButton({ icon: 10 });
+$("#btnSaveToFile").toolbarButton({ icon: 11 });
+$("#btnSettings").toolbarButton({ icon: 12 });
 
 $.fn.toolbarButton.defaults.iconSrc = "{{=URL('static','images/icons/nav.png')}}";
 $("#btnDone").toolbarButton({ icon: 6, label: "Done" });
@@ -268,26 +270,17 @@ $("#btnAddAmbivalent").click(function() {
 
 $("#btnSave").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph();
-    $.blockUI({
-        message: "Saving. Just a moment... ",
-    });
+    g.saveGraph("Saving. Just a moment... ");
 });
 
 $("#btnExport").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph("{{=URL('cam','download',args=[cam['id']])}}");
-    $.blockUI({
-        message: "Saving your image. Just a moment... ",
-    });
+    g.saveGraph("Saving your image. Just a moment... ", "{{=URL('cam','download',args=[cam['id']])}}");
 });
 
 $("#btnExportHOTCO").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph("{{=URL('cam','HOTCO_export',args=[cam['id']])}}");
-    $.blockUI({
-        message: "Generating code. Just a moment... ",
-    });
+    g.saveGraph("Generating code. Just a moment... ", "{{=URL('cam','HOTCO_export',args=[cam['id']])}}");
 });
 
 $("#btnZoomIn").click(function() {
@@ -308,10 +301,7 @@ $("#btnSettings").click(function() {
 
 $("#btnDone").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph("{{=URL('conflict','overview', args=[conflictid])}}");
-    $.blockUI({
-        message: "Saving. Just a moment... ",
-    });
+    g.saveGraph("Saving. Just a moment... ", "{{=URL('conflict','overview', args=[conflictid])}}");
 });
 
 /* Properties Modal
@@ -366,53 +356,99 @@ $.extend($.modal.defaults, {
     },
 });
 
-$("#btnApply")
-    .click(function() {
-        $("#btnApply").blur();           // Hack to reset button state
-        $("#conflict-title,#cam-title")[isChecked("#showTitle") ? 'show' : 'hide']();
-        g.applySettings({'theme' :     $("#theme").val(), 
-                         'showTitle' : isChecked("#showTitle"), 
-                         'fixedFont' : isChecked("#fixedFont")});
-        $.modal.close();
-    });
+$("#btnApply").click(function() {
+    $("#btnApply").blur();           // Hack to reset button state
+    $("#conflict-title,#cam-title")[isChecked("#showTitle") ? 'show' : 'hide']();
+    g.applySettings({'theme' :     $("#theme").val(), 
+                     'showTitle' : isChecked("#showTitle"), 
+                     'fixedFont' : isChecked("#fixedFont")});
+    $.modal.close();
+});
 
-$("#btnExportToString")
-    .click(function() {
-        $.modal.close();         
-        $("#save-text").val(g.createSaveString());
-        $("#btnExportToString").blur();             // Hack to reset button state
-        setTimeout(function() {             
-            $("#exportForm").modal();             
-        }, 500);            
+$("#btnSaveToFile").click(function() {
+    $.post(
+        "{{=URL('call/json/export')}}", 
+        {
+            'map_id': {{=cam.id}},
+            'code': g.createSaveString()
+        }, 
+        function(retData) {
+            $("body").append("<iframe src='{{=URL('cam','export_string',args=[cam['id']])}}' style='display: none;' ></iframe>")
+        }
+    );
+});
+
+// Check for the various File API support.
+if (window.File && window.FileReader && window.FileList && window.Blob) {
+    /**
+        Attaches the reader to file selector.
+    **/
+    $("#files").bind('change', function() {
+        var files = document.getElementById('files').files;
+        if (!files.length) {
+            alert('Please select a file to import!');
+            return;
+        }
+
+        var file = files[0];
+        var start = 0;
+        var stop = file.size - 1;
+        var reader = new FileReader();
+
+        // If we use onloadend, we need to check the readyState.
+        reader.onloadend = function(evt) {
+            if (evt.target.readyState == FileReader.DONE) { // DONE == 2
+                var saveText = evt.target.result;
+                if(saveText != "" && !g.generateGraphFromString(saveText)) {
+                    alert("Empathica failed to import your CAM. Please, ensure that you are trying to import a valid Empathica file.");
+                    return;
+                }
+                $.modal.close();
+                g.repaint();
+            } else {
+                alert('Empathica failed to read your file.');
+            }
+        };
+
+        if (file.webkitSlice) {
+            var blob = file.webkitSlice(start, stop + 1);
+        } else if (file.mozSlice) {
+            var blob = file.mozSlice(start, stop + 1);
+        }
+        
+        reader.readAsBinaryString(blob);
     });
     
-$("#btnSelectAll") 
-    .click(function() {
-        $("#save-text").select();
-    });
-    
-$("#btnImportFromString")
-    .click(function() {
-        $.modal.close();    
-        $("#btnImportFromString").blur();           // Hack to reset button state
+    $("#btnLoadFromFile").click(function() {
         setTimeout(function() {             
             $("#importForm").modal();            
         }, 500);
+    });    
+} else {
+
+    /**
+        Fallback if File API is not supported.
+    **/
+    $("#btnLoadFromFile").click(function() {
+        setTimeout(function() {             
+            $("#importFormFallback").modal();            
+        }, 500);
     });
-    
-$("#btnRestore") 
-    .click(function() {
-        $("#btnRestore").blur();           // Hack to reset button state
-        var saveText = $("#restore-text").val();
-        if (saveText != "") {
-            if(!g.generateGraphFromString(saveText)) {
-                alert("Your import string appears to be incorrect. Please, ensure that you are trying to import a valid Empathica CAM string.");
-                return;
+
+    $("#btnRestore") 
+        .click(function() {
+            $("#btnRestore").blur();           // Hack to reset button state
+            var saveText = $("#restore-text").val();
+            if (saveText != "") {
+                if(!g.generateGraphFromString(saveText)) {
+                    alert("Your import string appears to be incorrect. Please, ensure that you are trying to import a valid Empathica CAM string.");
+                    return;
+                }
             }
-        }
-        $.modal.close();
-        g.repaint();
-    });
+            $.modal.close();
+            g.repaint();
+        });
+}
     
 /* Initialization
 *******************************************************************************/
