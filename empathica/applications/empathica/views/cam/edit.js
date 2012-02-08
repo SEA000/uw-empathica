@@ -276,12 +276,12 @@ $("#btnSave").click(function() {
 
 $("#btnExport").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph("Saving your image. Just a moment... ", "{{=URL('cam','download',args=[cam['id']])}}?hash=" + g.hash);
+    g.saveGraph("Saving your image. Just a moment... ", function() {addIframe("{{=URL('cam','download',args=[cam['id']])}}");});
 });
 
 $("#btnExportHOTCO").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph("Generating code. Just a moment... ", "{{=URL('cam','HOTCO_export',args=[cam['id']])}}?hash=" + g.hash);
+    g.saveGraph("Generating code. Just a moment... ", function() {addIframe("{{=URL('cam','HOTCO_export',args=[cam['id']])}}");});
 });
 
 $("#btnZoomIn").click(function() {
@@ -304,6 +304,13 @@ $("#btnDone").click(function() {
     $('#btnSelect').toolbarButton('toggle');
     g.saveGraph("Saving. Just a moment... ", "{{=URL('conflict','overview', args=[conflictid])}}");
 });
+
+/**
+    Used for file downloads without popups.
+**/
+function addIframe(url) {
+    $("body").append("<iframe src='" + url + "?hash=" + g.hash + "' style='display: none;' ></iframe>")
+}
 
 /* Properties Modal
 *******************************************************************************/
@@ -374,7 +381,7 @@ $("#btnSaveToFile").click(function() {
             'code':   g.createSaveString()
         }, 
         function(retData) {
-            $("body").append("<iframe src='{{=URL('cam','export_string',args=[cam['id']])}}?hash=" + g.hash + "' style='display: none;' ></iframe>")
+            addIframe("{{=URL('cam','export_string',args=[cam['id']])}}");
         }
     );
 });

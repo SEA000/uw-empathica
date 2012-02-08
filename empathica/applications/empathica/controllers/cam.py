@@ -32,7 +32,8 @@ def edit():
     '''
     map_id = request.args(0)
     if not auth.has_permission('read', db.Map, map_id):
-        raise HTTP(403)
+        session.flash=T("You do not have permissions required to access this page!")
+        redirect(request.wsgi.environ['HTTP_REFERER'])
         
     cam = db.Map[map_id]
     group = db.GroupPerspective[cam.id_group]
@@ -291,7 +292,8 @@ def export_string():
     hash = ''
     if 'hash' in request.vars: hash = request.vars['hash']
     if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
-        raise HTTP(403)
+        session.flash=T("You do not have permissions required to use this function!")
+        redirect(request.wsgi.environ['HTTP_REFERER'])
         
     cam = db.Map[map_id]
     response.headers['Content-Type'] = contenttype('.txt')
@@ -307,11 +309,21 @@ def download():
     hash = ''
     if 'hash' in request.vars: hash = request.vars['hash']
     if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
-        raise HTTP(403)
+        session.flash=T("You do not have permissions required to use this function!")
+        redirect(request.wsgi.environ['HTTP_REFERER'])
         
     cam = db.Map[map_id]
-    return HTML(BODY(IMG(_src=cam.imgdata)))
+    try:
+        str = cam.imgdata
+        str = str[str.find(',') + 1:]    
+        str = str.decode('base64')
         
+        response.headers['Content-Type'] = contenttype('.png')
+        response.headers['Content-disposition'] = 'attachment; filename=' + remove_restricted(cam.title) +'.png'        
+        return str
+    except:
+        return HTML(BODY(IMG(_src=cam.imgdata)))
+
 @auth.requires_login()
 def HOTCO_export():
     '''
@@ -321,13 +333,12 @@ def HOTCO_export():
     hash = ''
     if 'hash' in request.vars: hash = request.vars['hash']
     if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
-        raise HTTP(403)
+        session.flash=T("You do not have permissions required to use this function!")
+        redirect(request.wsgi.environ['HTTP_REFERER'])
         
     data = []
-    data.append('<h1>Generated HOTCO code</h1>')
-    data.append('<pre>')
-    
-    group_id = db.Map[map_id].id_group
+    cam = db.Map[map_id]
+    group_id = cam.id_group
     conflict_id = db.GroupPerspective[group_id].id_conflict
     
     title = remove_restricted(db.Conflict[conflict_id].title)
@@ -386,8 +397,8 @@ def HOTCO_export():
     data.append('\t(show-valence)\n')
     data.append(')')
     
-    data.append('</pre>')
-        
+    response.headers['Content-Type'] = contenttype('.lisp')
+    response.headers['Content-disposition'] = 'attachment; filename=' + remove_restricted(cam.title) +'.lisp'                
     return data
         
 """

@@ -34,7 +34,7 @@
                             <div id="editor" class="icon"></div>
                             <h3>Editor</h3>
                         </div>
-                        <div class="save" onclick="window.open('{{=URL('cam','download',args=[cam['id']])}}', '_blank')"><div id="save-icon"></div>Download</div>
+                        <div class="save" onclick="location.href='{{=URL('cam','download',args=[cam['id']])}}'"><div id="save-icon"></div>Download</div>
                     </span>
                     <h6 class="title">{{=cam['title']}}</h6>
                 </div>
@@ -55,7 +55,7 @@
                             <div id="editor" class="icon"></div>
                             <h3>Editor</h3>
                         </div>
-                        <div class="save" onclick="window.open('{{=URL('cam','download',args=[cam['id']])}}', '_blank')"><div id="save-icon"></div>Download</div>
+                        <div class="save" onclick="location.href='{{=URL('cam','download',args=[cam['id']])}}'"><div id="save-icon"></div>Download</div>
                     </span>
                     <h6 class="title">{{=cam['title']}}</h6>
                 </div>
