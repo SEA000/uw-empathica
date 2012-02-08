@@ -31,21 +31,22 @@ def edit():
     Returns all of the data relevant to the selected CAM.
     '''
     map_id = request.args(0)
-    if(auth.has_permission('read', db.Map, map_id)):
-        cam = db.Map[map_id]
-        group = db.GroupPerspective[cam.id_group]
-        conflict = db.Conflict[group.id_conflict]
-        response.title = "Edit - " + conflict.title        
-        return dict(cam = cam, conflictid = conflict.id, conflict = conflict, can_update = get_update_hash(map_id, auth.user.id))
-    else:
-        raise HTTP(400)
+    if not auth.has_permission('read', db.Map, map_id):
+        raise HTTP(403)
+        
+    cam = db.Map[map_id]
+    group = db.GroupPerspective[cam.id_group]
+    conflict = db.Conflict[group.id_conflict]
+    response.title = "Edit - " + conflict.title        
+    return dict(cam = cam, conflictid = conflict.id, conflict = conflict, can_update = get_update_hash(map_id, auth.user.id))
+        
 
 @service.json
-def get_suggestions(map_id, timestamp):
+def get_suggestions(map_id, hash, timestamp):
     '''
     Returns a list of suggested nodes.
     '''
-    if not auth.has_permission('read', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
         return dict(success = False)
         
     suggestions = [] 
@@ -87,11 +88,11 @@ def call():
     return service()
 
 @service.json
-def get_graph_data(map_id):
+def get_graph_data(map_id, hash):
     '''
     Parse through and return all the map information.
     '''
-    if not auth.has_permission('read', db.Map, map_id):
+    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
         return dict(success=False)
         
     cam = db.Map[map_id]
@@ -277,8 +278,8 @@ def save_settings(map_id, hash, theme, settings):
     return dict(success=True)
  
 @service.json
-def export(map_id, code):
-    if not auth.has_permission('read', db.Map, map_id):
+def export(map_id, hash, code):
+    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
         return dict(success=False)
 
     db.Map[map_id] = dict(save_string = code)
@@ -287,13 +288,15 @@ def export(map_id, code):
 @auth.requires_login()
 def export_string():
     map_id = request.args(0)
-    if(auth.has_permission('read', db.Map, map_id)):
-        cam = db.Map[map_id]
-        response.headers['Content-Type'] = contenttype('.txt')
-        response.headers['Content-disposition'] = 'attachment; filename=' + remove_restricted(cam.title) +'.empathica'
-        return cam.save_string
-    else:
-        raise HTTP(400)         
+    hash = ''
+    if 'hash' in request.vars: hash = request.vars['hash']
+    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+        raise HTTP(403)
+        
+    cam = db.Map[map_id]
+    response.headers['Content-Type'] = contenttype('.txt')
+    response.headers['Content-disposition'] = 'attachment; filename=' + remove_restricted(cam.title) +'.empathica'
+    return cam.save_string  
  
 @auth.requires_login()
 def download():
@@ -301,11 +304,13 @@ def download():
     Returns the cached image of the CAM.
     '''
     map_id = request.args(0)
-    if(auth.has_permission('read', db.Map, map_id)):
-        cam = db.Map[map_id]
-        return HTML(BODY(IMG(_src=cam.imgdata)))
-    else:
-        raise HTTP(400)
+    hash = ''
+    if 'hash' in request.vars: hash = request.vars['hash']
+    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+        raise HTTP(403)
+        
+    cam = db.Map[map_id]
+    return HTML(BODY(IMG(_src=cam.imgdata)))
         
 @auth.requires_login()
 def HOTCO_export():
@@ -313,75 +318,77 @@ def HOTCO_export():
     Returns generated HOTCO code based on the given CAM.
     '''
     map_id = request.args(0)
-    if(auth.has_permission('read', db.Map, map_id)):
-        data = []
-        data.append('<h1>Generated HOTCO code</h1>')
-        data.append('<pre>')
+    hash = ''
+    if 'hash' in request.vars: hash = request.vars['hash']
+    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+        raise HTTP(403)
         
-        group_id = db.Map[map_id].id_group
-        conflict_id = db.GroupPerspective[group_id].id_conflict
-        
-        title = remove_restricted(db.Conflict[conflict_id].title)
-        relevant_nodes = db(db.Node.id_map == map_id).select(*['name','valence'])
-        relevant_edges = db(db.Connection.id_map == map_id).select(*['id_first_node','id_second_node','valence'])
-        
-        data.append('(defun ' + title + ' ()\n')
+    data = []
+    data.append('<h1>Generated HOTCO code</h1>')
+    data.append('<pre>')
+    
+    group_id = db.Map[map_id].id_group
+    conflict_id = db.GroupPerspective[group_id].id_conflict
+    
+    title = remove_restricted(db.Conflict[conflict_id].title)
+    relevant_nodes = db(db.Node.id_map == map_id).select(*['name','valence'])
+    relevant_edges = db(db.Connection.id_map == map_id).select(*['id_first_node','id_second_node','valence'])
+    
+    data.append('(defun ' + title + ' ()\n')
 
-        data.append('\t(setq *problem* \'oj-hot)\n')
-        data.append('\t(clear-net)\n')
-        data.append('\t(hot)\n')
+    data.append('\t(setq *problem* \'oj-hot)\n')
+    data.append('\t(clear-net)\n')
+    data.append('\t(hot)\n')
+    
+    data.append('\n')
+    data.append('\t(data \'( __FILL_THIS_IN ))\n')
+    
+    data.append('\n')
+    data.append('; Propositions:\n')
+    for node in relevant_nodes:
+        label = node.name.replace('\'', '')
+        label = label.replace('\"', '')
+        data.append('\t(proposition \'%s \"[%s] node is active.\")\n' % (remove_restricted(node.name), label))
+    
+    data.append('\n')
+    data.append('; Edges:\n')
+    
+    cached_node_names = {}
+    def get_node_name(id):
+        if id not in cached_node_names:
+            cached_node_names[id] = remove_restricted(db.Node[id].name)
+        return cached_node_names[id]
+    
+    for edge in relevant_edges:
+        start = get_node_name(edge.id_first_node)
+        end = get_node_name(edge.id_second_node)
+        data.append('\t(associate \'%s \'%s %0.2f)\n' % (start, end, edge.valence * 3))
         
-        data.append('\n')
-        data.append('\t(data \'( __FILL_THIS_IN ))\n')
+    data.append('\n')
+    data.append('\t(make-competition)\n')
+    data.append('\n')
+    
+    data.append('; HOTCO\n')
+    data.append('\t(valence-unit \'valence-special \'((good 1)))\n')
+    data.append('\n')
+    
+    data.append('; for HOTCO 2, note the evaluation units\n')
+    data.append('\t(setf *evaluation-units* *all-units*)\n')
         
-        data.append('\n')
-        data.append('; Propositions:\n')
-        for node in relevant_nodes:
-            label = node.name.replace('\'', '')
-            label = label.replace('\"', '')
-            data.append('\t(proposition \'%s \"[%s] node is active.\")\n' % (remove_restricted(node.name), label))
+    data.append('\n')
+    data.append('; Node value associations:\n')  
+    for node in relevant_nodes:
+        data.append('\t(associate \'%s \'good %0.2f)\n' % (remove_restricted(node.name), node.valence * 3))
+    
+    data.append('\n')  
+    data.append('\t(eval-cohere)\n')
+    data.append('\t(pls)\n')
+    data.append('\t(show-valence)\n')
+    data.append(')')
+    
+    data.append('</pre>')
         
-        data.append('\n')
-        data.append('; Edges:\n')
-        
-        cached_node_names = {}
-        def get_node_name(id):
-            if id not in cached_node_names:
-                cached_node_names[id] = remove_restricted(db.Node[id].name)
-            return cached_node_names[id]
-        
-        for edge in relevant_edges:
-            start = get_node_name(edge.id_first_node)
-            end = get_node_name(edge.id_second_node)
-            data.append('\t(associate \'%s \'%s %0.2f)\n' % (start, end, edge.valence * 3))
-            
-        data.append('\n')
-        data.append('\t(make-competition)\n')
-        data.append('\n')
-        
-        data.append('; HOTCO\n')
-        data.append('\t(valence-unit \'valence-special \'((good 1)))\n')
-        data.append('\n')
-        
-        data.append('; for HOTCO 2, note the evaluation units\n')
-        data.append('\t(setf *evaluation-units* *all-units*)\n')
-            
-        data.append('\n')
-        data.append('; Node value associations:\n')  
-        for node in relevant_nodes:
-            data.append('\t(associate \'%s \'good %0.2f)\n' % (remove_restricted(node.name), node.valence * 3))
-        
-        data.append('\n')  
-        data.append('\t(eval-cohere)\n')
-        data.append('\t(pls)\n')
-        data.append('\t(show-valence)\n')
-        data.append(')')
-        
-        data.append('</pre>')
-            
-        return data
-    else:
-        raise HTTP(400)
+    return data
         
 """
 DATABASE FUNCTIONS

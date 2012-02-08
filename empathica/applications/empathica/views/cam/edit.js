@@ -86,8 +86,8 @@ function addSuggestionToList(id, name) {
     Adds suggestion to the storage array and display list.
 **/
 function addSuggestion(id, name) {
-    // Make sure we don't duplicate and don't repeat the ignore
-    if (id in suggestions || jQuery.inArray(id, ignoreList) != -1) { 
+    // Make sure we don't duplicate, don't repeat the ignore, and don't suggest nodes that already exist
+    if (id in suggestions || jQuery.inArray(id, ignoreList) != -1 || g.hasNode(name)) { 
         return; 
     }
     
@@ -121,7 +121,8 @@ function getSuggestions() {
     $.getJSON(
         "{{=URL('call/json/get_suggestions')}}",
         {
-            'map_id': {{=cam.id}},
+            'map_id':    {{=cam.id}},
+            'hash':      g.hash,
             'timestamp': lastSuggestionsUpdate
         },
         function(data) {
@@ -275,12 +276,12 @@ $("#btnSave").click(function() {
 
 $("#btnExport").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph("Saving your image. Just a moment... ", "{{=URL('cam','download',args=[cam['id']])}}");
+    g.saveGraph("Saving your image. Just a moment... ", "{{=URL('cam','download',args=[cam['id']])}}?hash=" + g.hash);
 });
 
 $("#btnExportHOTCO").click(function() {
     $('#btnSelect').toolbarButton('toggle');
-    g.saveGraph("Generating code. Just a moment... ", "{{=URL('cam','HOTCO_export',args=[cam['id']])}}");
+    g.saveGraph("Generating code. Just a moment... ", "{{=URL('cam','HOTCO_export',args=[cam['id']])}}?hash=" + g.hash);
 });
 
 $("#btnZoomIn").click(function() {
@@ -311,7 +312,6 @@ $("#btnDone").click(function() {
 for (var id in THEMES) {
     if (THEMES[id].themeName == g.settings['theme']) {
         $("#theme").val(id);
-        debugOut(id);
         break;
     }
 }
@@ -370,10 +370,11 @@ $("#btnSaveToFile").click(function() {
         "{{=URL('call/json/export')}}", 
         {
             'map_id': {{=cam.id}},
-            'code': g.createSaveString()
+            'hash':   g.hash,
+            'code':   g.createSaveString()
         }, 
         function(retData) {
-            $("body").append("<iframe src='{{=URL('cam','export_string',args=[cam['id']])}}' style='display: none;' ></iframe>")
+            $("body").append("<iframe src='{{=URL('cam','export_string',args=[cam['id']])}}?hash=" + g.hash + "' style='display: none;' ></iframe>")
         }
     );
 });

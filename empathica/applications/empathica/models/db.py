@@ -101,7 +101,7 @@ db.define_table('Map',
         Field('theme', 'string', default = "Default Theme"),
         Field('originX', 'double', default = 0),
         Field('originY', 'double', default = 0),
-        Field('save_string', 'string'))
+        Field('save_string', 'text'))
 
 db.define_table('Node',
         Field('name', 'string'),

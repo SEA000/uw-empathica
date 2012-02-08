@@ -155,7 +155,6 @@ function Graph() {
     // Undo
     this.undoStack = new Array();
     this.undoIdCounter = 0;
-    this.lastSavedId = -1;
     this.maxUndoStackSize = 100;
     this.saveThreshold = 60;
     this.numOperations = 0;
@@ -502,6 +501,19 @@ Graph.prototype.setNodeText = function(node, newText) {
     node.text = textSoFar;
     
     this.repaint();
+}
+
+/**
+    Checks whether the graph already has node with the given text.
+**/
+Graph.prototype.hasNode = function(text) {
+    for (var nid in this.nodes) {
+        var node = this.nodes[nid];
+        if (node.text == text) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

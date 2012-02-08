@@ -186,7 +186,8 @@ Graph.prototype.db_getGraphData = function() {
     $.getJSON(
         url,
         {   
-            map_id:         g.mapID
+            map_id:         g.mapID,
+            hash:           g.hash
         }, function(data) {
             //debugOut(data);
             if (g.db_validate_response(data)) {

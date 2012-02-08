@@ -54,24 +54,14 @@ Graph.prototype.removeFromUndoById = function(nid) {
 Graph.prototype.saveChanges = function() {
 
     // Make sure we have stuff to save
-    if (this.undoStack.length == 0) {
+    if (this.undoStack.length == 0 || this.pendingSaves == 1) {
         this.onSaveComplete();
         return;
-    }
-    
-    // Find index of last save
-    var start = 0;
-    for (var i = 0; i < this.undoStack.length; i += 1) {
-        var cmd = this.undoStack[i];
-        if (cmd.id > this.lastSavedId) {
-            start = i;
-            break;
-        }
     }
 
     // Add command to the save hash
     var cmdHash = new CmdHash();
-    for (var i = start; i < this.undoStack.length; i += 1) {
+    for (var i = 0; i < this.undoStack.length; i += 1) {
         var cmd = this.undoStack[i];
         if (cmd.objType == this.cmdMulti) {
             // If a multi command, then add all of its constituents to the hash
@@ -92,11 +82,6 @@ Graph.prototype.saveChanges = function() {
         }
     }
     
-    debugOut(cmdHash.hash);
-    
-    // Update the index of last save
-    this.lastSavedId = this.undoStack[this.undoStack.length - 1].id;
-
     // Save the command hash
     var hash = cmdHash.hash;
     var thumb = this.createImage(true);
@@ -111,6 +96,10 @@ Graph.prototype.saveChanges = function() {
 Graph.prototype.onSaveComplete = function() {
     $.unblockUI({
         onUnblock: function() {
+            // Clear the undo stack
+            g.undoStack.length = 0;
+        
+            // Redirect if needed
             if (g.redirectOnSave != "") {
                 location.href = g.redirectOnSave;
             }
