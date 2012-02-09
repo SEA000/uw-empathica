@@ -223,6 +223,5 @@ $(".pair .close").click(undoClick);
 {{ for pair in related_nodes: }}
     correlate({{=pair[0]}}, {{=pair[1]}}, "{{=pair[2]}}", {{=pair[3]}}, {{=pair[4]}}, "{{=pair[5]}}", {{=str(pair[6]).lower()}});
 {{ pass }}
-
 //equalHeight($('.column')); 
 //$("#center").height($("#center").height()-22);

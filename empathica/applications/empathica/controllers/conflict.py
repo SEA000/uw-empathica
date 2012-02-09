@@ -170,9 +170,9 @@ def correlate():
     need to restrict access
     """
 
-    id_one = request.args(0)
-    id_two = request.args(1)
-    if id_one < id_two:
+    id_one = int(request.args(0))
+    id_two = int(request.args(1))
+    if id_two < id_one:
         id_one, id_two = id_two, id_one
         
     graph_one = db.Map(id_one)
@@ -186,17 +186,15 @@ def correlate():
 
     conflict = db.Conflict(graph_one.id_group.id_conflict)
     
-    related_nodes = [] 
-    
     graph_one_nodes = db(db.Node.id_map == graph_one).select()
     graph_two_nodes = db(db.Node.id_map == graph_two).select()
-    mapping = db((db.NodeMapping.map_one == graph_one) & (db.NodeMapping.map_two == graph_two)).select()
+    mapping = db(db.NodeMapping.map_one == graph_one or db.NodeMapping.map_two == graph_two).select()
     
     # Store the mapped ids in a hash table (assumes no id collisions)
     mapped_nodes = {}
     for row in mapping:
-        mapped_nodes[row.node_one] = True
-        mapped_nodes[row.node_one] = True
+        mapped_nodes[row.node_one.id] = True
+        mapped_nodes[row.node_two.id] = True
     
     filtered_graph_one = []
     for node in graph_one_nodes:
@@ -216,9 +214,9 @@ def correlate():
     
 @auth.requires_login()
 def compare():
-    id_one = request.args(0)
-    id_two = request.args(1)
-    if id_one < id_two:
+    id_one = int(request.args(0))
+    id_two = int(request.args(1))
+    if id_two < id_one:
         id_one, id_two = id_two, id_one
         
     graph_one = db.Map(id_one)
@@ -341,9 +339,9 @@ def compare():
     
 @auth.requires_login()
 def compromise():
-    id_one = request.args(0)
-    id_two = request.args(1)
-    if id_one < id_two:
+    id_one = int(request.args(0))
+    id_two = int(request.args(1))
+    if id_two < id_one:
         id_one, id_two = id_two, id_one
         
     graph_one = db.Map(id_one)
