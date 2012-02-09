@@ -13,33 +13,47 @@ from time import mktime
 import gluon.contrib.simplejson as json
 from gluon.contenttype import contenttype
 
-def get_update_hash(map_id, user_id):
-    s = str(map_id) + ' ' + str(user_id) + ' update' 
+# Infrastructure for permission hashing
+def get_hash(map_id, user_id, permission):
+    s = str(map_id) + ' ' + str(user_id) + ' ' + permission
     return hashlib.sha256(s).hexdigest()
 
+def access_denied(map_id, user_id, hash):
+    return not can_update(map_id, user_id, hash) and not can_read(map_id, user_id, hash)
+    
 def can_update(map_id, user_id, hash):
-    return hash == get_update_hash(map_id, user_id)
+    return hash == get_hash(map_id, user_id, 'update')
+    
+def can_read(map_id, user_id, hash):
+    return hash == get_hash(map_id, user_id, 'read')    
     
 # Auxiliary function for removing potentially problematic characters
 def remove_restricted(str):
     res = re.sub("[^A-Za-z0-9_\s]", "", str)
-    return re.sub("\s+", "_", res)    
+    return re.sub("\s+", "_", res)
     
 @auth.requires_login()
 def edit():
     '''
     Returns all of the data relevant to the selected CAM.
     '''
-    map_id = request.args(0)
+    map_id = request.args(0)        
     if not auth.has_permission('read', db.Map, map_id):
         session.flash=T("You do not have permissions required to access this page!")
         redirect(request.wsgi.environ['HTTP_REFERER'])
+    
+    hash = ''
+    user_id = auth.user.id
+    if auth.has_permission('update', db.Map, map_id):
+        hash = get_hash(map_id, user_id, 'update')
+    else:
+        hash = get_hash(map_id, user_id, 'read')
         
     cam = db.Map[map_id]
     group = db.GroupPerspective[cam.id_group]
     conflict = db.Conflict[group.id_conflict]
-    response.title = "Edit - " + conflict.title        
-    return dict(cam = cam, conflictid = conflict.id, conflict = conflict, can_update = get_update_hash(map_id, auth.user.id))
+    response.title = "Edit - " + conflict.title
+    return dict(cam = cam, conflictid = conflict.id, conflict = conflict, hash = hash)
         
 
 @service.json
@@ -47,7 +61,7 @@ def get_suggestions(map_id, hash, timestamp):
     '''
     Returns a list of suggested nodes.
     '''
-    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+    if access_denied(map_id, auth.user.id, hash):
         return dict(success = False)
         
     suggestions = [] 
@@ -93,7 +107,7 @@ def get_graph_data(map_id, hash):
     '''
     Parse through and return all the map information.
     '''
-    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+    if access_denied(map_id, auth.user.id, hash):
         return dict(success=False)
         
     cam = db.Map[map_id]
@@ -280,7 +294,7 @@ def save_settings(map_id, hash, theme, settings):
  
 @service.json
 def export(map_id, hash, code):
-    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+    if access_denied(map_id, auth.user.id, hash):
         return dict(success=False)
 
     db.Map[map_id] = dict(save_string = code)
@@ -291,7 +305,7 @@ def export_string():
     map_id = request.args(0)
     hash = ''
     if 'hash' in request.vars: hash = request.vars['hash']
-    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+    if access_denied(map_id, auth.user.id, hash):
         session.flash=T("You do not have permissions required to use this function!")
         redirect(request.wsgi.environ['HTTP_REFERER'])
         
@@ -308,7 +322,7 @@ def download():
     map_id = request.args(0)
     hash = ''
     if 'hash' in request.vars: hash = request.vars['hash']
-    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+    if access_denied(map_id, auth.user.id, hash):
         session.flash=T("You do not have permissions required to use this function!")
         redirect(request.wsgi.environ['HTTP_REFERER'])
         
@@ -332,7 +346,7 @@ def HOTCO_export():
     map_id = request.args(0)
     hash = ''
     if 'hash' in request.vars: hash = request.vars['hash']
-    if not can_update(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
+    if access_denied(map_id, auth.user.id, hash):
         session.flash=T("You do not have permissions required to use this function!")
         redirect(request.wsgi.environ['HTTP_REFERER'])
         

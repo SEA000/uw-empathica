@@ -19,7 +19,7 @@ function Graph() {
     this.textInput = $('#textEditInput');
     
     this.mapID = {{=cam.id}};
-    this.hash = "{{=can_update}}";
+    this.hash = "{{=hash}}";
     
     // Min and max values for node and edge valence values
     this.minValence = -1;

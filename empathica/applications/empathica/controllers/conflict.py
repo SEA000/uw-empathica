@@ -2,6 +2,7 @@
 Conflict Controller
 """
 import logging
+import random
 from gluon.contrib import simplejson as json
 
 if settings.web2py_runtime_gae:
@@ -109,12 +110,9 @@ def manage():
 
     for conflict in conflicts:
         admin_group = auth.id_group('conflict_%s_admin' % conflict.id)
-        is_admin = False
-        if(auth.has_membership(admin_group)):
-            is_admin = True
         groups = db(db.GroupPerspective.id_conflict == conflict.id).select()
         conflictD = conflict.as_dict()
-        conflictD['is_admin'] = True
+        conflictD['is_admin'] = auth.has_membership(admin_group)
         record = {
             'conflict' : conflictD,
             'groups' : groups.as_dict().values()
@@ -153,11 +151,6 @@ def overview():
             
             for group in groups:
                 group['maps'] = db((db.Map.id_group == group.id) & (db.Map.id_secondary == group.id)).select().as_dict().values()
-                
-            
-            # TEMP HAX -- REMOVE 2 CAMS
-            #groups[0]['maps'].pop();
-            #groups[1]['maps'].pop();
             
             response.title = "Overview - %s" % conflict.title
             return dict(conflict=conflict.as_dict(), groups = groups.as_dict().values(), is_admin = is_admin)
@@ -177,14 +170,10 @@ def correlate():
     need to restrict access
     """
 
-    id_one = None
-    id_two = None
-    if(int(request.args(0)) < int(request.args(1))):
-        id_one = int(request.args(0))
-        id_two = int(request.args(1))
-    else:
-        id_one = int(request.args(1))
-        id_two = int(request.args(0))
+    id_one = request.args(0)
+    id_two = request.args(1)
+    if id_one < id_two:
+        id_one, id_two = id_two, id_one
         
     graph_one = db.Map(id_one)
     graph_two = db.Map(id_two)
@@ -192,45 +181,45 @@ def correlate():
     if not graph_one or not graph_two:
         raise HTTP(400)
 
-    if(graph_one.id_group.id_conflict.id != graph_two.id_group.id_conflict.id):
+    if graph_one.id_group.id_conflict.id != graph_two.id_group.id_conflict.id:
         raise HTTP(400)
 
     conflict = db.Conflict(graph_one.id_group.id_conflict)
     
-    graph_one_nodes = []
-    graph_two_nodes = []
     related_nodes = [] 
     
     graph_one_nodes = db(db.Node.id_map == graph_one).select()
+    graph_two_nodes = db(db.Node.id_map == graph_two).select()
+    mapping = db((db.NodeMapping.map_one == graph_one) & (db.NodeMapping.map_two == graph_two)).select()
+    
+    # Store the mapped ids in a hash table (assumes no id collisions)
+    mapped_nodes = {}
+    for row in mapping:
+        mapped_nodes[row.node_one] = True
+        mapped_nodes[row.node_one] = True
+    
     filtered_graph_one = []
     for node in graph_one_nodes:
-        if db(db.NodeMapping.node_one == node.id).count() == 0:
+        if node.id not in mapped_nodes:
             filtered_graph_one.append(node)
     
-    graph_two_nodes = db(db.Node.id_map == graph_two).select()
     filtered_graph_two = []
     for node in graph_two_nodes:
-        if db(db.NodeMapping.node_two == node.id).count() == 0:
-            filtered_graph_two.append(node)
-            
-    mapping = db(db.NodeMapping.map_one == graph_one or db.NodeMapping.map_two == graph_two).select()
+        if node.id not in mapped_nodes:
+            filtered_graph_two.append(node)    
     
     related_nodes = []
-    for relation in mapping:
-        related_nodes.append((relation.node_one.id_map, relation.node_one.id, relation.node_one.name, relation.node_two.id_map, relation.node_two.id, relation.node_two.name, relation.identical))
+    for row in mapping:
+        related_nodes.append((row.node_one.id_map, row.node_one.id, row.node_one.name, row.node_two.id_map, row.node_two.id, row.node_two.name, row.identical))
 
     return dict(conflict = conflict, a_nodes = filtered_graph_one, b_nodes = filtered_graph_two, related_nodes = related_nodes)
     
 @auth.requires_login()
 def compare():
-    id_one = None
-    id_two = None
-    if(int(request.args(0)) < int(request.args(1))):
-        id_one = int(request.args(0))
-        id_two = int(request.args(1))
-    else:
-        id_one = int(request.args(1))
-        id_two = int(request.args(0))
+    id_one = request.args(0)
+    id_two = request.args(1)
+    if id_one < id_two:
+        id_one, id_two = id_two, id_one
         
     graph_one = db.Map(id_one)
     graph_two = db.Map(id_two)
@@ -243,49 +232,60 @@ def compare():
     one_to_harm = {}
     two_to_harm = {}
     
+    map_one_nodes = db(db.Node.id_map == graph_one).select()
+    map_two_nodes = db(db.Node.id_map == graph_two).select()
+    
+    # Establish node mappings
+    max_id = 0
+    not_equal = False
     for record in db((db.NodeMapping.map_one == graph_one) & (db.NodeMapping.map_two == graph_two)).select():
         lookup_table.append((record.id, record.map_one, record.node_one, record.map_two, record.node_two, record.identical))
-        if(record.identical == False):
+        if not record.identical:
             opposite_nodes.append((record.node_two.id))
+        
+        # Keep track of the highest id
+        if record.id > max_id:
+            max_id = record.id
     
-    for n in db(db.Node.id_map == graph_one).select():
+    # Make sure each node has a mapping record
+    for n in map_one_nodes:
         found = False
         for record in lookup_table:
-            if((record[2]) == n.id):
+            if record[2] == n.id:
                 one_to_harm[n.id] = record[0]
                 found = True
                 break
         if found == False:
-            import random
-            i = random.random()
-            one_to_harm[n.id] = i
-            lookup_table.append((i, graph_one.id, n.id, graph_two.id, None, None))
+            not_equal = True
+            max_id += 1
+            one_to_harm[n.id] = max_id
+            lookup_table.append((max_id, graph_one.id, n.id, graph_two.id, None, None))
     
-    for n in db(db.Node.id_map == graph_two).select():
+    for n in map_two_nodes:
         found = False
         for record in lookup_table:
-            if((record[4]) == n.id):
+            if record[4] == n.id:
                 two_to_harm[n.id] = record[0]
                 found = True
                 break
         if found == False:
-            import random
-            i = random.random()
-            two_to_harm[n.id] = i
-            lookup_table.append((i, graph_one.id, None, graph_two.id, n.id, None))
+            not_equal = True
+            max_id += 1
+            two_to_harm[n.id] = max_id
+            lookup_table.append((max_id, graph_one.id, None, graph_two.id, n.id, None))
     
     harm_map_one = {}
-    for n in db(db.Node.id_map == graph_one).select():
+    for n in map_one_nodes:
         for record in lookup_table:
             if record[2] == n.id:
                 harm_map_one[record[0]] = n.valence
                 
     harm_map_two = {}
-    for n in db(db.Node.id_map == graph_two).select():
+    for n in map_two_nodes:
         for record in lookup_table:
             if record[4] == n.id:
                 multiplier = 1.0
-                if(n.id in opposite_nodes):
+                if n.id in opposite_nodes:
                     multiplier = -1.0
                 harm_map_two[record[0]] = n.valence * multiplier
     
@@ -324,26 +324,27 @@ def compare():
     
     ret_list = []
     
-    for (val, id) in difference:
+    for val, id in difference:
         for record in lookup_table:
-            if id == record[0]:
-                if record[2] is not None:
-                    ret_list.append((val, db.Node(record[2]).name))
-                else:
-                    ret_list.append((val, db.Node(record[4]).name))
+            if id != record[0]:
+                continue
+                
+            if record[2] is not None:
+                ret_list.append((val, db.Node(record[2]).name))
+            else:
+                ret_list.append((val, db.Node(record[4]).name))
+            break
     
+    if not_equal:
+        response.flash=T("For more accurate results correlate the concepts first.")
     return dict(conflict = conflict, ret_list = ret_list)
     
 @auth.requires_login()
 def compromise():
-    id_one = None
-    id_two = None
-    if(int(request.args(0)) < int(request.args(1))):
-        id_one = int(request.args(0))
-        id_two = int(request.args(1))
-    else:
-        id_one = int(request.args(1))
-        id_two = int(request.args(0))
+    id_one = request.args(0)
+    id_two = request.args(1)
+    if id_one < id_two:
+        id_one, id_two = id_two, id_one
         
     graph_one = db.Map(id_one)
     graph_two = db.Map(id_two)
@@ -357,46 +358,56 @@ def compromise():
     
     one_to_harm = {}
     two_to_harm = {}
+
+    map_one_nodes = db(db.Node.id_map == graph_one).select()
+    map_two_nodes = db(db.Node.id_map == graph_two).select()
     
+    # Establish node mappings
+    max_id = 0
+    not_equal = False
     for record in db((db.NodeMapping.map_one == graph_one) & (db.NodeMapping.map_two == graph_two)).select():
         lookup_table.append((record.id, record.map_one, record.node_one, record.map_two, record.node_two, record.identical))
         if(record.identical == False):
             opposite_nodes.append((record.node_two.id))
+            
+        # Keep track of the highest id
+        if record.id > max_id:
+            max_id = record.id            
     
-    for n in db(db.Node.id_map == graph_one).select():
+    for n in map_one_nodes:
         found = False
         for record in lookup_table:
-            if((record[2]) == n.id):
+            if record[2] == n.id:
                 one_to_harm[n.id] = record[0]
                 found = True
                 break
         if found == False:
-            import random
-            i = random.random()
-            one_to_harm[n.id] = i
-            lookup_table.append((i, graph_one.id, n.id, graph_two.id, None, None))
+            not_equal = True
+            max_id += 1
+            one_to_harm[n.id] = max_id
+            lookup_table.append((max_id, graph_one.id, n.id, graph_two.id, None, None))
     
-    for n in db(db.Node.id_map == graph_two).select():
+    for n in map_two_nodes:
         found = False
         for record in lookup_table:
-            if((record[4]) == n.id):
+            if record[4] == n.id:
                 two_to_harm[n.id] = record[0]
                 found = True
                 break
         if found == False:
-            import random
-            i = random.random()
-            two_to_harm[n.id] = i
-            lookup_table.append((i, graph_one.id, None, graph_two.id, n.id, None))
+            not_equal = True
+            max_id += 1
+            two_to_harm[n.id] = max_id
+            lookup_table.append((max_id, graph_one.id, None, graph_two.id, n.id, None))
     
     harm_map_one = {}
-    for n in db(db.Node.id_map == graph_one).select():
+    for n in map_one_nodes:
         for record in lookup_table:
             if record[2] == n.id:
                 harm_map_one[record[0]] = n.valence
                 
     harm_map_two = {}
-    for n in db(db.Node.id_map == graph_two).select():
+    for n in map_two_nodes:
         for record in lookup_table:
             if record[4] == n.id:
                 multiplier = 1.0
@@ -440,8 +451,7 @@ def compromise():
     harm_to_ab = {}
     for record in lookup_table:
         harm_to_ab[record[0]] = (record[2], record[4])
-    
-    
+        
     ret_list = []
     for sol in solns:
         ret_val = []
@@ -450,8 +460,10 @@ def compromise():
                 ret_val.append((db.Node(harm_to_ab[c][0]).name,sol[2][c]))
             else:
                 ret_val.append((db.Node(harm_to_ab[c][1]).name,sol[2][c]))
-        ret_list.append((sol[0],sol[1],ret_val))
+        ret_list.append((sol[0], sol[1], ret_val))
     
+    if not_equal:
+        response.flash=T("For more accurate results correlate the concepts first.")
     return dict(conflict = conflict, ret_list = ret_list, best_sol = best_sol, group1=group1, group2=group2)
     
 @auth.requires_login()
