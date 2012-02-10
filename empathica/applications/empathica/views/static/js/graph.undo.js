@@ -13,6 +13,7 @@ Graph.prototype.pushToUndo = function(objType, objId, property, oldValue, newVal
     // Add command to the undo stack
     this.undoIdCounter += 1;
     this.undoStack.push(new Command(this.undoIdCounter, objType, objId, property, oldValue, newValue));
+    debugOut(this.undoStack);
     
     // Keep the save hash from getting too big and save data periodically
     this.numOperations += 1;
@@ -55,6 +56,8 @@ Graph.prototype.saveChanges = function() {
 
     // Make sure we have stuff to save
     if (this.undoStack.length == 0 || this.pendingSaves == 1) {
+        debugOut(this.pendingSaves);
+        debugOut(this.undoStack.length);
         this.onSaveComplete();
         return;
     }
@@ -87,6 +90,9 @@ Graph.prototype.saveChanges = function() {
     var thumb = this.createImage(true);
     var img = this.createImage(false);
     this.db_save(hash, thumb, img);
+    
+    // Clear the undo stack
+    this.undoStack = [];
 }
 
 /**
@@ -95,13 +101,16 @@ Graph.prototype.saveChanges = function() {
 **/
 Graph.prototype.onSaveComplete = function() {
     $.unblockUI({
-        onUnblock: function() {
-            // Clear the undo stack
-            g.undoStack.length = 0;
-        
-            // Redirect if needed
-            if (g.redirectOnSave != "") {
-                location.href = g.redirectOnSave;
+        onUnblock: function() {            
+            // If we get a string, redirect
+            if (g.actionOnSave.substring) {
+                if (g.actionOnSave != "") {
+                    location.href = g.actionOnSave;
+                }
+            // Otherwise, must be a callback
+            } else {
+                g.actionOnSave();
+                g.actionOnSave = "";
             }
         }
     });
@@ -173,6 +182,7 @@ Graph.prototype.hadleNodeCommandUndo = function(nid, property, oldValue) {
         // and undo stack, but not push another undo event
         this.nodes[nid].newNode = true;
         this.deleteNode(nid);
+        this.showValenceSelector();
     } else if (property == this.cmdDeleteDB) {
         // Re-add the deleted node
         this.nodes[nid] = oldValue['dead'];

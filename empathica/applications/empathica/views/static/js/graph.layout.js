@@ -226,12 +226,14 @@ Graph.prototype.moveOrigin = function(offsetX, offsetY) {
 /**
     Reposition a node in the graph.
 **/
-Graph.prototype.setPosition = function(n, x, y) {    
+Graph.prototype.setPosition = function(n, x, y, pushToUndo) {    
     var oldDim = jQuery.extend(true, {}, n.dim);
     n.dim.x = g.unscaleX(x);
     n.dim.y = g.unscaleY(y);
     var newDim = jQuery.extend(true, {}, n.dim);
 
     // Push to undo stack
-    this.pushToUndo(this.cmdNode, n.id, this.cmdDim, oldDim, newDim);
+    if (pushToUndo) {
+        this.pushToUndo(this.cmdNode, n.id, this.cmdDim, oldDim, newDim);
+    }
 }

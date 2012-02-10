@@ -179,7 +179,7 @@ function Graph() {
     
     // Saving
     this.pendingSaves = 0;
-    this.redirectOnSave = "";
+    this.actionOnSave = "";
     
     // Graph and node move
     this.moveOffset = 10;
@@ -409,7 +409,7 @@ Graph.prototype.suggestedNode = function(id, nodeText, nodeValence, x, y) {
     
     // Change the display
     this.setPosition(n, x, y);
-    this.setSizeByText(this.ctx, n, true);
+    this.setSizeByText(this.ctx, n);
         
     this.pushToUndo(this.cmdNode, n.id, this.cmdAddSuggested, "", n);
     g.db_addNode(n);
@@ -437,7 +437,7 @@ Graph.prototype.addNode = function(nodeText, nodeValence, x, y) {
     
     // Change the display
     this.setPosition(n, x, y);
-    this.setSizeByText(this.ctx, n, true);
+    this.setSizeByText(this.ctx, n);
 
     // Repaint
     this.repaint();
@@ -481,7 +481,7 @@ Graph.prototype.addEdge = function(id1, id2, v, inPts) {
 /**
     Changes the text of a node by id.
 **/
-Graph.prototype.setNodeText = function(node, newText) {
+Graph.prototype.setNodeText = function(node, newText, pushToUndo) {
     if (!(node instanceof Node) || newText == null) {
         return;
     }
@@ -497,7 +497,9 @@ Graph.prototype.setNodeText = function(node, newText) {
     }
     textSoFar = jQuery.trim(textSoFar);
     
-    this.pushToUndo(this.cmdNode, node.id, this.cmdText, node.text, textSoFar);
+    if (pushToUndo) {
+        this.pushToUndo(this.cmdNode, node.id, this.cmdText, node.text, textSoFar);
+    }
     node.text = textSoFar;
     
     this.repaint();
@@ -639,7 +641,7 @@ Graph.prototype.deleteSelection = function () {
 /**
     Set the size of a node based on the text it contains.
 **/
-Graph.prototype.setSizeByText = function(ctx, node, push) {
+Graph.prototype.setSizeByText = function(ctx, node, pushToUndo) {
     if (!(node instanceof Node)) {
         return;
     }
@@ -706,7 +708,7 @@ Graph.prototype.setSizeByText = function(ctx, node, push) {
         count += 1;
     }
     
-    if (push) {
+    if (pushToUndo) {
         this.pushToUndo(new Command(this.cmdNode, node.id, this.cmdDim, oldDim, node.dim));
     }
     
@@ -1045,6 +1047,7 @@ Graph.prototype.showValenceSelector = function(obj, mx, my) {
         if (this.selectedObject instanceof Node || this.selectedObject instanceof Edge) {
             obj = this.selectedObject;
         } else {
+            this.hideValenceSelector();
             return;
         }
     }

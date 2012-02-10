@@ -180,8 +180,8 @@ Graph.prototype.onEndRenaming = function() {
         return false;
     }
 
-    g.setNodeText(g.selectedObject, text);    
-    g.setSizeByText(g.ctx, g.selectedObject);
+    g.setNodeText(g.selectedObject, text, !g.selectedObject.newNode);
+    g.setSizeByText(g.ctx, g.selectedObject, !g.selectedObject.newNode);
     
     // Check if naming a new node for the first time
     if (g.selectedObject.newNode) {
