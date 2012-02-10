@@ -322,7 +322,7 @@ def download():
     map_id = request.args(0)
     hash = ''
     if 'hash' in request.vars: hash = request.vars['hash']
-    if access_denied(map_id, auth.user.id, hash):
+    if access_denied(map_id, auth.user.id, hash) and not auth.has_permission('read', db.Map, map_id):
         session.flash=T("You do not have permissions required to use this function!")
         redirect(request.wsgi.environ['HTTP_REFERER'])
         
