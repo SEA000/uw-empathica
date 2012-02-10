@@ -188,27 +188,39 @@ def correlate():
     
     graph_one_nodes = db(db.Node.id_map == graph_one).select()
     graph_two_nodes = db(db.Node.id_map == graph_two).select()
-    mapping = db(db.NodeMapping.map_one == graph_one or db.NodeMapping.map_two == graph_two).select()
+    mapping = db((db.NodeMapping.map_one == graph_one) & (db.NodeMapping.map_two == graph_two)).select()
     
     # Store the mapped ids in a hash table (assumes no id collisions)
     mapped_nodes = {}
     for row in mapping:
-        mapped_nodes[row.node_one.id] = True
-        mapped_nodes[row.node_two.id] = True
+        mapped_nodes[row.node_one.id] = {}
+        mapped_nodes[row.node_two.id] = {}
     
     filtered_graph_one = []
     for node in graph_one_nodes:
         if node.id not in mapped_nodes:
             filtered_graph_one.append(node)
+        else:
+            entry = mapped_nodes[node.id]
+            entry['id_map'] = node.id_map
+            entry['name'] = node.name
     
     filtered_graph_two = []
     for node in graph_two_nodes:
         if node.id not in mapped_nodes:
-            filtered_graph_two.append(node)    
+            filtered_graph_two.append(node)
+        else:
+            entry = mapped_nodes[node.id]
+            entry['id_map'] = node.id_map
+            entry['name'] = node.name
     
     related_nodes = []
     for row in mapping:
-        related_nodes.append((row.node_one.id_map, row.node_one.id, row.node_one.name, row.node_two.id_map, row.node_two.id, row.node_two.name, row.identical))
+        node_one_id = row.node_one.id
+        node_two_id = row.node_two.id
+        node_one = mapped_nodes[node_one_id]
+        node_two = mapped_nodes[node_two_id]
+        related_nodes.append((node_one['id_map'], node_one_id, node_one['name'], node_two['id_map'], node_two_id, node_two['name'], row.identical))
 
     return dict(conflict = conflict, a_nodes = filtered_graph_one, b_nodes = filtered_graph_two, related_nodes = related_nodes)
     
@@ -480,8 +492,7 @@ def summary_print():
 def invite():
     group_id = request.args(0)
     group = db.GroupPerspective[group_id]
-    form = FORM('Email:', INPUT(_name='invitee_email'),
-                INPUT(_type='submit'))
+    form = FORM('Email:', INPUT(_name='invitee_email'), INPUT(_type='submit'))
     if form.accepts(request.vars):
         user_id = None
         existingUser = db(db.auth_user.email == form.vars.invitee_email).select()
@@ -753,7 +764,6 @@ def create_map(group_id, group_secondary_id, title):
         auth.add_membership(admin_group_id)
 
         db.commit()
-
         return dict(success=True, map_id=map_id)
     else:
         db.rollback()
@@ -771,10 +781,15 @@ def delete_map(map_id):
         return dict(success=False)
 
 @service.json
-def correlate_nodes(map1, map2):
+def correlate_nodes(map_one_id, map_two_id):
 
-    db(db.NodeMapping.map_one == map1).delete()
-    db(db.NodeMapping.map_two == map2).delete()
+    id_one = int(map_one_id)
+    id_two = int(map_two_id)
+    if id_two < id_one:
+        id_one, id_two = id_two, id_one
+
+    # Delete all old nodes
+    db((db.NodeMapping.map_one == id_one) & (db.NodeMapping.map_two == id_two)).delete()
     
     pairs = json.loads(request.body.read())
     for pair in pairs:
@@ -788,4 +803,5 @@ def correlate_nodes(map1, map2):
             node1, node2 = node2, node1
         db.NodeMapping.insert(map_one = map1, node_one = node1, map_two = map2, node_two = node2, identical = same)
 
-    return dict(success=True, pairs=pairs)
+    db.commit()
+    return dict(success=True)
