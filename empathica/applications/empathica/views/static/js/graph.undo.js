@@ -13,7 +13,6 @@ Graph.prototype.pushToUndo = function(objType, objId, property, oldValue, newVal
     // Add command to the undo stack
     this.undoIdCounter += 1;
     this.undoStack.push(new Command(this.undoIdCounter, objType, objId, property, oldValue, newValue));
-    debugOut(this.undoStack);
     
     // Keep the save hash from getting too big and save data periodically
     this.numOperations += 1;
@@ -56,8 +55,6 @@ Graph.prototype.saveChanges = function() {
 
     // Make sure we have stuff to save
     if (this.undoStack.length == 0 || this.pendingSaves == 1) {
-        debugOut(this.pendingSaves);
-        debugOut(this.undoStack.length);
         this.onSaveComplete();
         return;
     }
