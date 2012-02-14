@@ -11,3 +11,4 @@ do
 	tar zxvf $f -C $path/web2py.app/Contents/Resources/applications/init
 	echo "Finished installing $f"
 done
+exit
