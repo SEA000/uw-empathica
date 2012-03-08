@@ -33,6 +33,7 @@ def remove_restricted(str):
     return re.sub("\s+", "_", res)
     
 @auth.requires_login()
+@onerror
 def edit():
     '''
     Returns all of the data relevant to the selected CAM.

@@ -4,9 +4,16 @@ BEGINNING OF DBPY FILE
 import uuid
 import os
 import sys
+import traceback
+import gluon.restricted
+import urllib
 from gluon.settings import settings
 from gluon.tools import *
 from datetime import datetime
+
+# TODO: fill this out
+primary_support_email = "e_solodkin@hotmail.com"
+secondary_support_email = "pthagard@artsservices.uwaterloo.ca"
 
 mail = Mail()
 
@@ -167,3 +174,39 @@ db.Invite.invitee_email.requires = [
 db.Invite.id_group.requires = [
         IS_IN_DB(db, db.GroupPerspective.id)
 ]
+
+# Global error handler
+def onerror(function):
+  def __onerror__(*a,**b):
+    try:
+        return function(*a,**b)
+    except HTTP, e:
+        # Todo handle these gracefully too
+        raise e
+    except Exception, e:
+        tb = traceback.extract_tb(sys.exc_info()[2])
+        last = None
+        msg = ''
+        if len(tb) > 1:
+            last = tb[-1]
+            if len(last) > 2:
+                msg = ' '.join([str(v) for v in last[1:]])
+        ticket = gluon.restricted.RestrictedError(function.__name__).log(request)
+        redirect(URL(r=request, c='default', f='index', vars={'error':ticket, 'exception' : e, 'trace': msg}))
+  return __onerror__
+ 
+# Composes the error report message into a mailto link
+def get_report_link(exc, trace):
+    s = 'mailto:' + primary_support_email 
+    s += '?cc=' + secondary_support_email
+    s += '&subject=Empathica Error Report'
+    s += '&body='
+    s += 'EMPATHICA Error Report: %0d'
+    s += '  -----------------------------------------------%0d'
+    s += '    Timestamp: ' + urllib.quote(datetime.now().strftime("%Y-%m-%d %H-%M")) + '%0d'
+    s += "    Error: " + urllib.quote(exc) + '%0d'
+    s += '    Trace: ' + urllib.quote(trace) + '%0d'
+    s += '  -----------------------------------------------%0d'
+    s += 'Thank you for submitting this report!'
+    return s
+    

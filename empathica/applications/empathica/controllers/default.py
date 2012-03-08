@@ -1,14 +1,12 @@
 def index():
-
     return dict()
 
+@onerror
 def about():
     response.title = "About"
     return dict()
 
-def tutorial():
-    response.title = "Tutorial"
-    return dict()
-
+@onerror
 def user():
     return dict(form=auth())
+    

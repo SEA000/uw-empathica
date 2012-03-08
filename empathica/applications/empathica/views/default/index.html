@@ -8,6 +8,8 @@
     {{ include 'default/index.js' }}
 {{ end }}
 
+<!--body = HTML(BODY('<a href="/admin/default/ticket/%(ticket)s" target="_blank">%(ticket)s</a>'% dict(ticket=ticket)))-->
+
 {{ def header(): }}
     {{
         if USER:
@@ -18,20 +20,24 @@
             startLbl = "Get Started"
         pass
     }}
+    
     <div id="banner">
         <div class="wrapper">
             <div id="title"></div>
+            {{ if 'error' not in request.vars:}}
             <div id="links">
                 <button id="about" onclick='location.href="{{=URL('about')}}";'>Learn More</button>
                 <button id="start" onclick='location.href="{{=startUrl}}";'>{{=startLbl}}</button>
             </div>
+            {{pass}}
         </div>
     </div>
 {{ return #header }}
 
 {{ block content }}
-    <div id="border"></div>
-    <div id="slider">
+    <div id="border"></div>  
+    {{ if 'error' not in request.vars: }}
+    <div id="slider">        
         <div id="info">
             <img src="{{=URL('static','images/index/info1.png')}}" />
             <div id="description">
@@ -62,5 +68,19 @@
             <li id="more"><h3>Learn More</h3></li>
         </ul>
     </div>
+    {{ else: }}
+    <div id="slider" style="margin-top:-180px;">
+        <div align="center">
+            <h3 style="margin-top:20px;">OOPS... Empathica encountered an error from which it could not recover!</h3>
+            <img src="{{=URL('static','images/index/error.png')}}" style="margin-top:20px;"/><br />                
+            <div style="margin-top:10px;"/>      
+                {{ if not settings.web2py_runtime_gae: }}
+                <button id="view_error" onclick='location.href="/admin/default/ticket/{{=request.vars['error']}}";'>View Error</button>
+                {{ pass }}
+                <button id="report" onclick='location.href="{{=get_report_link(request.vars['exception'], request.vars['trace'])}}";'>Submit Error Report</button>
+            </div>
+        </div>
+    </div>
+    {{ pass }}    
     <a href="http://www.uwaterloo.ca/" title="University of Waterloo"><div id="uw-logo"></div></a>
 {{ end #content }}

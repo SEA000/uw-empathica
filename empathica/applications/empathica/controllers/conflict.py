@@ -9,6 +9,7 @@ if settings.web2py_runtime_gae:
     from google.appengine.api import taskqueue
 
 @auth.requires_login()
+@onerror
 def new():
     """
     Creates a new Conflict and associates it with two perspectives
@@ -101,9 +102,10 @@ def new():
     return dict(form=form)
 
 @auth.requires_login()
+@onerror
 def manage():
     response.title = "Manage Conflicts"
-
+    
     open = []
     closed = []
     conflicts = db(db.Conflict.authorized_users.contains(auth.user.id)).select()
@@ -137,6 +139,7 @@ def manage():
     return dict(open=open, closed=closed, invites=invites)
 
 @auth.requires_login()
+@onerror
 def overview():
     try:
         conflict_id = request.args(0)
@@ -162,6 +165,7 @@ def overview():
     return dict()
 
 @auth.requires_login()
+@onerror
 def correlate():
     """
     need list of all nodes in graph a
@@ -225,6 +229,7 @@ def correlate():
     return dict(conflict = conflict, a_nodes = filtered_graph_one, b_nodes = filtered_graph_two, related_nodes = related_nodes)
     
 @auth.requires_login()
+@onerror
 def compare():
     id_one = int(request.args(0))
     id_two = int(request.args(1))
@@ -350,6 +355,7 @@ def compare():
     return dict(conflict = conflict, ret_list = ret_list)
     
 @auth.requires_login()
+@onerror
 def compromise():
     id_one = int(request.args(0))
     id_two = int(request.args(1))
@@ -475,20 +481,9 @@ def compromise():
     if not_equal:
         response.flash=T("For more accurate results correlate the concepts first.")
     return dict(conflict = conflict, ret_list = ret_list, best_sol = best_sol, group1=group1, group2=group2)
-    
-@auth.requires_login()
-def summary_print():
-    try:
-        conflict_id = request.vars['conflict_id']
-        if(auth.has_permission(db.Conflict, 'read', conflict_id)):
-            response.title = "Print Conflict Summary"
-            return dict()
-        else:
-            raise HTTP(403)
-    except KeyError:
-        raise HTTP(400)
 
 @auth.requires_login()
+@onerror
 def invite():
     group_id = request.args(0)
     group = db.GroupPerspective[group_id]
@@ -507,6 +502,7 @@ def invite():
     return dict(form = form, group = group.as_dict())
 
 @auth.requires_login()
+@onerror
 def accept_invite():
     invite = db.Invite[request.args(0)]
     if(auth.user.id == invite.id_user):
@@ -523,6 +519,7 @@ def accept_invite():
         redirect(URL('manage'))
 
 @auth.requires_login()
+@onerror
 def ignore_invite():
     invite = db.Invite[request.args(0)]
     if(auth.user.id == invite.id_user):
@@ -532,6 +529,7 @@ def ignore_invite():
         redirect(URL('manage'))
 
 @auth.requires_login()
+@onerror
 def claim_token():
     token = request.args(0)
 
@@ -549,7 +547,6 @@ def claim_token():
             db.commit()
 
         redirect(URL('manage'))
-
     else:
         invite = invite[0]
         # we're looking at the original token
@@ -583,17 +580,7 @@ def claim_token():
 def call():
     session.forget()
     return service()
-
-@service.json
-def edit_conflict(conflict_id, title, description):
-    if not auth.has_permission('update', db.Conflict, conflict_id):
-        db.rollback()
-        return dict(success=False)
     
-    db.Conflict[conflict_id] = dict(title=title, description=description)
-    db.commit()
-    return dict(success=True)
-
 @service.json
 def close_conflict(id):
     """
@@ -630,26 +617,6 @@ def delete_conflict(id):
         return dict(success=True)
     else:
         return dict(success=False)
-
-# TODO:
-# Upload a conflict
-# Download a conflict
-
-# Conflict overview
-
-@service.json
-def solve_conflict():
-    """
-    BUGBUG: ensure that the user is allowed to solve this conflict
-    """
-    from google.appengine.api import taskqueue
-    taskqueue.add(url='/empathica/conflict/call/json/compute_conflict', params={'key:': 'test'})
-    return dict(success=True)
-
-@service.json
-def compute_conflict():
-    #TODO: Hard work goes here
-    return
 
 @service.json
 def edit_title(conflict_id, title):
