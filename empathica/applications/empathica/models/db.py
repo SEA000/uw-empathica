@@ -11,9 +11,12 @@ from gluon.settings import settings
 from gluon.tools import *
 from datetime import datetime
 
-# TODO: fill this out
+# TODO: Move this to some configuration file
 primary_support_email = "e_solodkin@hotmail.com"
 secondary_support_email = "pthagard@artsservices.uwaterloo.ca"
+empathica_version = 0.3
+update_donwload_url = "http://www.student.cs.uwaterloo.ca/~esolodki/empathica.march8.w2p"
+current_version_url = "http://www.student.cs.uwaterloo.ca/~esolodki/empathica_version"
 
 mail = Mail()
 
