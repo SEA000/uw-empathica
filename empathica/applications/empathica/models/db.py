@@ -37,10 +37,30 @@ auth.define_tables()
 # redirect after login
 auth.settings.login_next = URL('conflict', 'manage')
 auth.settings.logout_next = URL('default', 'index')
+
 # TODO: May need to define other redirects
 # messages
 auth.messages.logged_in = 'Signed in'
 auth.messages.logged_out = 'Signed out'
+
+# Disable auth_event logging
+auth.messages.register_log = None
+auth.messages.login_log = None
+auth.messages.logout_log = None
+auth.messages.profile_log = None
+auth.messages.verify_email_log = None
+auth.messages.retrieve_username_log = None
+auth.messages.retrieve_password_log = None
+auth.messages.reset_password_log = None
+auth.messages.change_password_log = None
+auth.messages.add_group_log = None
+auth.messages.del_group_log = None
+auth.messages.add_membership_log = None
+auth.messages.del_membership_log = None
+auth.messages.has_membership_log = None
+auth.messages.add_permission_log = None
+auth.messages.del_permission_log = None
+auth.messages.has_permission_log = None
 
 service = Service(globals())
 
