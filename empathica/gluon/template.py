@@ -16,9 +16,15 @@ Contributors:
 
 import os
 import re
+import cgi
 import cStringIO
-import restricted
-
+import logging
+try:
+    from restricted import RestrictedError
+except:
+    def RestrictedError(a,b,c):
+        logging.error(str(a)+':'+str(b)+':'+str(c))
+        return RuntimeError
 
 class Node(object):
     """
@@ -222,6 +228,7 @@ class Content(BlockNode):
 
 class TemplateParser(object):
 
+    default_delimiters = ('{{','}}')
     r_tag = re.compile(r'(\{\{.*?\}\})', re.DOTALL)
 
     r_multiline = re.compile(r'(""".*?""")|(\'\'\'.*?\'\'\')', re.DOTALL)
@@ -279,10 +286,14 @@ class TemplateParser(object):
 
         # allow optional alternative delimiters
         self.delimiters = delimiters
-        if delimiters!=('{{','}}'):
+        if delimiters != self.default_delimiters:
             escaped_delimiters = (re.escape(delimiters[0]),re.escape(delimiters[1]))
             self.r_tag = re.compile(r'(%s.*?%s)' % escaped_delimiters, re.DOTALL)
-
+        elif context.has_key('response'):
+            if context['response'].delimiters != self.default_delimiters:
+                escaped_delimiters = (re.escape(context['response'].delimiters[0]),
+                                      re.escape(context['response'].delimiters[1]))
+                self.r_tag = re.compile(r'(%s.*?%s)' % escaped_delimiters,re.DOTALL)
 
         # Create a root level Content that everything will go into.
         self.content = Content(name=name)
@@ -406,10 +417,7 @@ class TemplateParser(object):
         """
         Raise an error using itself as the filename and textual content.
         """
-        if text:
-            raise restricted.RestrictedError(self.name, text, message)
-        else:
-            raise restricted.RestrictedError(self.name, self.text, message)
+        raise RestrictedError(self.name, text or self.text, message)
 
     def _get_file_text(self, filename):
         """
@@ -432,9 +440,7 @@ class TemplateParser(object):
         # try to read the text.
         try:
             fileobj = open(filepath, 'rb')
-
             text = fileobj.read()
-
             fileobj.close()
         except IOError:
             self._raise_error('Unable to open included view file: ' + filepath)
@@ -454,7 +460,7 @@ class TemplateParser(object):
                            writer  = self.writer,
                            delimiters = self.delimiters)
 
-        content.append(str(t.content))
+        content.append(t.content)
 
     def extend(self, filename):
         """
@@ -812,7 +818,7 @@ def parse_template(filename,
             text = fp.read()
             fp.close()
         except IOError:
-            raise restricted.RestrictedError(filename, '', 'Unable to find the file')
+            raise RestrictedError(filename, '', 'Unable to find the file')
     else:
         text = filename.read()
 
@@ -863,7 +869,35 @@ def render(content = "hello world",
     '012'
     """
     # Here to avoid circular Imports
-    import globals
+    try:
+        from globals import Response
+    except:
+        # Working standalone. Build a mock Response object.
+        class Response():
+            def __init__(self):
+                self.body = cStringIO.StringIO()
+            def write(self, data, escape=True):
+                if not escape:
+                    self.body.write(str(data))
+                elif hasattr(data,'xml') and callable(data.xml):
+                    self.body.write(data.xml())
+                else:
+                    # make it a string
+                    if not isinstance(data, (str, unicode)):
+                        data = str(data)
+                    elif isinstance(data, unicode):
+                        data = data.encode('utf8', 'xmlcharrefreplace')
+                    data = cgi.escape(data, True).replace("'","&#x27;")
+                    self.body.write(data)
+
+        # A little helper to avoid escaping.
+        class NOESCAPE():
+            def __init__(self, text):
+                self.text = text
+            def xml(self):
+                return self.text
+        # Add it to the context so we can use it.
+        context['NOESCAPE'] = NOESCAPE
 
     # If we don't have anything to render, why bother?
     if not content and not stream and not filename:
@@ -879,7 +913,7 @@ def render(content = "hello world",
             stream = cStringIO.StringIO(content)
 
     # Get a response class.
-    context['response'] = globals.Response()
+    context['response'] = Response()
 
     # Execute the template.
     code = str(TemplateParser(stream.read(), context=context, path=path, lexers=lexers, delimiters=delimiters))
@@ -899,3 +933,7 @@ def render(content = "hello world",
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+
+
+

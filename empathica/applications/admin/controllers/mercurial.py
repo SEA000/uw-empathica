@@ -1,3 +1,5 @@
+from gluon.fileutils import read_file, write_file
+
 if DEMO_MODE or MULTI_USER_MODE:
     session.flash = T('disabled in demo mode')
     redirect(URL('default','site'))
@@ -11,7 +13,10 @@ syntax: glob
 *.pyc
 *.pyo
 *.bak
+*.bak2
 cache/*
+private/*
+uploads/*
 databases/*
 sessions/*
 errors/*
@@ -29,7 +34,7 @@ def hg_repo(path):
         repo = hg.repository(ui=uio, path=path, create=True)
     hgignore = os.path.join(path, '.hgignore')
     if not os.path.exists(hgignore):
-        open(hgignore, 'w').write(_hgignore_content)
+        write_file(hgignore, _hgignore_content)
     return repo
 
 def commit():
@@ -40,18 +45,22 @@ def commit():
                 INPUT(_type='submit',_value='Commit'))
     if form.accepts(request.vars,session):
         oldid = repo[repo.lookup('.')]
-        cmdutil.addremove(repo)
+        scmutil.addremove(repo)
         repo.commit(text=form.vars.comment)
         if repo[repo.lookup('.')] == oldid:
             response.flash = 'no changes'
-    files = TABLE(*[TR(file) for file in repo[repo.lookup('.')].files()])
-    changes = TABLE(TR(TH('revision'),TH('description')))
-    for change in repo.changelog:
-        ctx=repo.changectx(change)
-        revision, description = ctx.rev(), ctx.description()
-        changes.append(TR(A(revision,_href=URL('revision',
-                                               args=(app,revision))),
-                          description))
+    try:
+        files = TABLE(*[TR(file) for file in repo[repo.lookup('.')].files()])
+        changes = TABLE(TR(TH('revision'),TH('description')))
+        for change in repo.changelog:
+            ctx=repo.changectx(change)
+            revision, description = ctx.rev(), ctx.description()
+            changes.append(TR(A(revision,_href=URL('revision',
+                                                   args=(app,revision))),
+                              description))
+    except:
+        files = []
+        changes = []
     return dict(form=form,files=files,changes=changes,repo=repo)
 
 def revision():
@@ -71,3 +80,5 @@ def revision():
         desc=ctx.description(),
         form=form
         )
+
+

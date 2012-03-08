@@ -35,7 +35,7 @@ class Storage(dict):
 
     """
     A Storage object is like a dictionary except `obj.foo` can be used
-    in addition to `obj['foo']`.
+    in addition to `obj['foo']`, and setting obj.foo = None deletes item foo.
 
         >>> o = Storage(a=1)
         >>> print o.a
@@ -55,13 +55,10 @@ class Storage(dict):
     """
 
     def __getattr__(self, key):
-        if key in self:
-            return self[key]
-        else:
-            return None
+        return dict.get(self, key, None)
 
     def __setattr__(self, key, value):
-        if value == None:
+        if value is None:
             if key in self:
                 del self[key]
         else:
@@ -72,6 +69,9 @@ class Storage(dict):
             del self[key]
         else:
             raise AttributeError, "missing key=%s" % key
+
+    def __getitem__(self, key):
+        return dict.get(self, key, None)
 
     def __repr__(self):
         return '<Storage ' + dict.__repr__(self) + '>'
@@ -156,6 +156,10 @@ class Storage(dict):
             return value[-1]
         return None
 
+PICKABLE = (str,int,long,float,bool,list,dict,tuple,set)
+def PickleableStorage(data):
+    return Storage(dict((k,v) for (k,v) in data.items() if isinstance(v,PICKABLE)))
+
 class StorageList(Storage):
     """
     like Storage but missing elements default to [] instead of None
@@ -168,21 +172,22 @@ class StorageList(Storage):
             return self[key]
 
 def load_storage(filename):
-    fp = open(filename, 'rb')
-    portalocker.lock(fp, portalocker.LOCK_EX)
-    storage = cPickle.load(fp)
-    portalocker.unlock(fp)
-    fp.close()
+    fp = None
+    try:
+        fp = portalocker.LockedFile(filename, 'rb')
+        storage = cPickle.load(fp)
+    finally:
+        if fp: fp.close()
     return Storage(storage)
 
 
 def save_storage(storage, filename):
-    fp = open(filename, 'wb')
-    portalocker.lock(fp, portalocker.LOCK_EX)
-    cPickle.dump(dict(storage), fp)
-    portalocker.unlock(fp)
-    fp.close()
-
+    fp = None
+    try:
+        fp = portalocker.LockedFile(filename, 'wb')
+        cPickle.dump(dict(storage), fp)
+    finally:
+        if fp: fp.close()
 
 class Settings(Storage):
 
@@ -217,3 +222,7 @@ class Messages(Storage):
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+
+
+

@@ -46,3 +46,10 @@ class MemcacheClient(Client):
             value = obj[1] + value
         self.set((time.time(), value))
         return value
+
+    def clear(self, key):
+        key = '%s/%s' % (self.request.application, key)
+        self.delete(key)
+
+
+

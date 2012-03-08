@@ -81,7 +81,7 @@ class HTTP(BaseException):
             if not body:
                 body = status
             if isinstance(body, str):
-                if len(body)<512:
+                if len(body)<512 and self.headers['Content-Type'].startswith('text/html'):
                     body += '<!-- %s //-->' % ('x'*512) ### trick IE
                 self.headers['Content-Length'] = len(body)
         headers = []
@@ -120,7 +120,13 @@ class HTTP(BaseException):
 
 
 def redirect(location, how=303):
+    if not location:
+        return
     location = location.replace('\r', '%0D').replace('\n', '%0A')
     raise HTTP(how,
                'You are being redirected <a href="%s">here</a>' % location,
                Location=location)
+
+
+
+

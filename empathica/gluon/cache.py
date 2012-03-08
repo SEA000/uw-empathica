@@ -144,7 +144,7 @@ class CacheInRam(CacheAbstract):
     def clear(self, regex=None):
         self.locker.acquire()
         storage = self.storage
-        if regex == None:
+        if regex is None:
             storage.clear()
         else:
             self._clear(storage, regex)
@@ -172,14 +172,14 @@ class CacheInRam(CacheAbstract):
 
         self.locker.acquire()
         item = self.storage.get(key, None)
-        if item and f == None:
+        if item and f is None:
             del self.storage[key]
         self.storage[CacheAbstract.cache_stats_name]['hit_total'] += 1
         self.locker.release()
 
         if f is None:
             return None
-        if item and (dt == None or item[0] > time.time() - dt):
+        if item and (dt is None or item[0] > time.time() - dt):
             return item[1]
         value = f()
 
@@ -216,6 +216,8 @@ class CacheOnDisk(CacheAbstract):
     Values stored in disk cache must be pickable.
     """
 
+    speedup_checks = set()
+
     def __init__(self, request, folder=None):
         self.request = request
 
@@ -228,47 +230,61 @@ class CacheOnDisk(CacheAbstract):
 
         ### we need this because of a possible bug in shelve that may
         ### or may not lock
-        self.locker_name = os.path.join(request.folder,
-                                        'cache/cache.lock')
-        self.shelve_name = os.path.join(request.folder,
-                'cache/cache.shelve')
+        self.locker_name = os.path.join(folder,'cache.lock')
+        self.shelve_name = os.path.join(folder,'cache.shelve')
 
         locker, locker_locked = None, False
-        try:
-            locker = open(self.locker_name, 'a')
-            portalocker.lock(locker, portalocker.LOCK_EX)
-            locker_locked = True
-            storage = shelve.open(self.shelve_name)
-
-            if not storage.has_key(CacheAbstract.cache_stats_name):
-                storage[CacheAbstract.cache_stats_name] = {
-                    'hit_total': 0,
-                    'misses': 0,
-                    }
-                storage.sync()
-        except ImportError:
-            pass # no module _bsddb, ignoring exception now so it makes a ticket only if used
-        except:
-            logger.error('corrupted file: %s' % self.shelve_name)
-        if locker_locked:
-            portalocker.unlock(locker)
-        if locker:
-            locker.close()
+        speedup_key = (folder,CacheAbstract.cache_stats_name)
+        if not speedup_key in self.speedup_checks or \
+                not os.path.exists(self.shelve_name):
+            try:
+                locker = open(self.locker_name, 'a')
+                portalocker.lock(locker, portalocker.LOCK_EX)
+                locker_locked = True
+                storage = shelve.open(self.shelve_name)
+                try:
+                    if not storage.has_key(CacheAbstract.cache_stats_name):
+                        storage[CacheAbstract.cache_stats_name] = {
+                            'hit_total': 0,
+                            'misses': 0,
+                            }
+                        storage.sync()
+                finally:
+                    storage.close()
+                self.speedup_checks.add(speedup_key)
+            except ImportError:
+                pass # no module _bsddb, ignoring exception now so it makes a ticket only if used
+            except:
+                logger.error('corrupted file %s, will try delete it!' \
+                                 % self.shelve_name)
+                try:
+                    os.unlink(self.shelve_name)
+                except IOError:
+                    logger.warn('unable to delete file %s' % self.shelve_name)
+                except OSError:
+                    logger.warn('unable to delete file %s' % self.shelve_name)
+            if locker_locked:
+                portalocker.unlock(locker)
+            if locker:
+                locker.close()
 
     def clear(self, regex=None):
         locker = open(self.locker_name,'a')
         portalocker.lock(locker, portalocker.LOCK_EX)
         storage = shelve.open(self.shelve_name)
-        if regex == None:
-            storage.clear()
-        else:
-            self._clear(storage, regex)
-        if not CacheAbstract.cache_stats_name in storage.keys():
-            storage[CacheAbstract.cache_stats_name] = {
-                'hit_total': 0,
-                'misses': 0,
-            }
-        storage.sync()
+        try:
+            if regex is None:
+                storage.clear()
+            else:
+                self._clear(storage, regex)
+            if not CacheAbstract.cache_stats_name in storage.keys():
+                storage[CacheAbstract.cache_stats_name] = {
+                    'hit_total': 0,
+                    'misses': 0,
+                }
+            storage.sync()
+        finally:
+            storage.close()
         portalocker.unlock(locker)
         locker.close()
 
@@ -278,11 +294,10 @@ class CacheOnDisk(CacheAbstract):
 
         locker = open(self.locker_name,'a')
         portalocker.lock(locker, portalocker.LOCK_EX)
-
         storage = shelve.open(self.shelve_name)
 
         item = storage.get(key, None)
-        if item and f == None:
+        if item and f is None:
             del storage[key]
 
         storage[CacheAbstract.cache_stats_name] = {
@@ -297,13 +312,12 @@ class CacheOnDisk(CacheAbstract):
 
         if f is None:
             return None
-        if item and (dt == None or item[0] > time.time() - dt):
+        if item and (dt is None or item[0] > time.time() - dt):
             return item[1]
         value = f()
 
         locker = open(self.locker_name,'a')
         portalocker.lock(locker, portalocker.LOCK_EX)
-
         storage[key] = (time.time(), value)
 
         storage[CacheAbstract.cache_stats_name] = {
@@ -313,6 +327,7 @@ class CacheOnDisk(CacheAbstract):
 
         storage.sync()
 
+        storage.close()
         portalocker.unlock(locker)
         locker.close()
 
@@ -327,12 +342,10 @@ class CacheOnDisk(CacheAbstract):
                 value = storage[key][1] + value
             storage[key] = (time.time(), value)
             storage.sync()
-        except BaseException, e:
+        finally:
+            storage.close()
             portalocker.unlock(locker)
             locker.close()
-            raise e
-        portalocker.unlock(locker)
-        locker.close()
         return value
 
 
@@ -409,6 +422,14 @@ class Cache(object):
             cache_model = self.ram
 
         def tmp(func):
-            return lambda: cache_model(key, func, time_expire)
+            def action():
+                return cache_model(key, func, time_expire)
+            action.__name___ = func.__name__
+            action.__doc__ = func.__doc__
+            return action
 
         return tmp
+
+
+
+

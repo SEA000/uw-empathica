@@ -19,11 +19,10 @@ import socket
 import signal
 import math
 import logging
-
 import newcron
 import main
 
-from fileutils import w2p_pack
+from fileutils import w2p_pack, read_file, write_file
 from shell import run, test
 from settings import global_settings
 
@@ -40,11 +39,9 @@ try:
 except NameError:
     BaseException = Exception
 
-ProgramName = 'web2py Enterprise Web Framework'
+ProgramName = 'web2py Web Framework'
 ProgramAuthor = 'Created by Massimo Di Pierro, Copyright 2007-2011'
-versioninfo = open('VERSION', 'r')
-ProgramVersion = versioninfo.read().strip()
-versioninfo.close()
+ProgramVersion = read_file('VERSION').strip()
 
 ProgramInfo = '''%s
                  %s
@@ -114,11 +111,13 @@ def presentation(root):
     canvas.pack()
     root.update()
 
-    img = Tkinter.PhotoImage(file='splashlogo.gif')
-    pnl = Tkinter.Label(canvas, image=img, background='white', bd=0)
-    pnl.pack(side='top', fill='both', expand='yes')
-    # Prevent garbage collection of img
-    pnl.image=img
+    logo = 'splashlogo.gif'
+    if os.path.exists(logo):
+        img = Tkinter.PhotoImage(file=logo)
+        pnl = Tkinter.Label(canvas, image=img, background='white', bd=0)
+        pnl.pack(side='top', fill='both', expand='yes')
+        # Prevent garbage collection of img
+        pnl.image=img
 
     def add_label(text='Change Me', font_size=12, foreground='#195866', height=1):
         return Tkinter.Label(
@@ -323,7 +322,7 @@ class web2pyDialog(object):
                 pass
 
             self.root.destroy()
-            sys.exit()
+            sys.exit(0)
 
     def error(self, message):
         """ Show error message """
@@ -490,6 +489,12 @@ def console():
                       dest='ssl_private_key',
                       help='file that contains ssl private key')
 
+    parser.add_option('--ca-cert',
+                      action='store',
+                      dest='ssl_ca_certificate',
+                      default=None,
+                      help='Use this file containing the CA certificate to validate X509 certificates from clients')
+
     parser.add_option('-d',
                       '--pid_filename',
                       default='httpserver.pid',
@@ -548,6 +553,13 @@ def console():
                       type='int',
                       dest='shutdown_timeout',
                       help='timeout on shutdown of server (5 seconds)')
+
+    parser.add_option('--socket-timeout',
+                      default=5,
+                      type='int',
+                      dest='socket_timeout',
+                      help='timeout for socket (5 second)')
+
     parser.add_option('-f',
                       '--folder',
                       default=os.getcwd(),
@@ -579,10 +591,21 @@ def console():
 
     msg = 'run web2py in interactive shell or IPython (if installed) with'
     msg += ' specified appname (if app does not exist it will be created).'
+    msg += ' APPNAME like a/c/f (c,f optional)'
     parser.add_option('-S',
                       '--shell',
                       dest='shell',
                       metavar='APPNAME',
+                      help=msg)
+
+    msg = 'run web2py in interactive shell or bpython (if installed) with'
+    msg += ' specified appname (if app does not exist it will be created).'
+    msg += '\n Use combined with --shell'
+    parser.add_option('-B',
+                      '--bpython',
+                      action='store_true',
+                      default=False,
+                      dest='bpython',
                       help=msg)
 
     msg = 'only use plain python shell; should be used with --shell option'
@@ -609,6 +632,15 @@ def console():
                       dest='run',
                       metavar='PYTHON_FILE',
                       default='',
+                      help=msg)
+
+    msg = 'run scheduled tasks for the specified apps'
+    msg += '-K app1,app2,app3'
+    msg += 'requires a scheduler defined in the models'
+    parser.add_option('-K',
+                      '--scheduler',
+                      dest='scheduler',
+                      default=None,
                       help=msg)
 
     msg = 'run doctests in web2py environment; ' +\
@@ -688,7 +720,14 @@ def console():
                       default=None,
                       help='should be followed by a list of arguments to be passed to script, to be used with -S, -A must be the last option')
 
-    msg = 'listen on multiple addresses: "ip:port:cert:key;ip2:port2:cert2:key2;..." (:cert:key optional; no spaces)'
+    parser.add_option('--no-banner',
+                      action='store_true',
+                      default=False,
+                      dest='nobanner',
+                      help='Do not print header banner')
+
+
+    msg = 'listen on multiple addresses: "ip:port:cert:key:ca_cert;ip2:port2:cert2:key2:ca_cert2;..." (:cert:key optional; no spaces)'
     parser.add_option('--interfaces',
                       action='store',
                       dest='interfaces',
@@ -721,14 +760,16 @@ def console():
 
     options.folder = os.path.abspath(options.folder)
 
-    #  accept --interfaces in the form "ip:port:cert:key;ip2:port2;ip3:port3:cert3:key3"
+    #  accept --interfaces in the form
+    #  "ip:port:cert:key;ip2:port2;ip3:port3:cert3:key3"
     #  (no spaces; optional cert:key indicate SSL)
-    #
     if isinstance(options.interfaces, str):
-        options.interfaces = [interface.split(':') for interface in options.interfaces.split(';')]
+        options.interfaces = [
+            interface.split(':') for interface in options.interfaces.split(';')]
         for interface in options.interfaces:
             interface[1] = int(interface[1])    # numeric port
-        options.interfaces = [tuple(interface) for interface in options.interfaces]
+        options.interfaces = [
+            tuple(interface) for interface in options.interfaces]
 
     if options.numthreads is not None and options.minthreads is None:
         options.minthreads = options.numthreads  # legacy
@@ -736,9 +777,7 @@ def console():
     if not options.cronjob:
         # If we have the applications package or if we should upgrade
         if not os.path.exists('applications/__init__.py'):
-            fp = open('applications/__init__.py', 'w')
-            fp.write('')
-            fp.close()
+            write_file('applications/__init__.py', '')
 
         if not os.path.exists('welcome.w2p') or os.path.exists('NEWINSTALL'):
             try:
@@ -750,6 +789,31 @@ def console():
 
     return (options, args)
 
+def start_schedulers(options):
+    apps = [app.strip() for app in options.scheduler.split(',')]
+    try:
+        from multiprocessing import Process
+    except:
+        sys.stderr.write('Sorry, -K only supported for python 2.6-2.7\n')
+        return
+    processes = []
+    code = "from gluon import current; current._scheduler.loop()"
+    for app in apps:
+        print 'starting scheduler for "%s"...' % app
+        args = (app,True,True,None,False,code)
+        logging.getLogger().setLevel(logging.DEBUG)
+        p = Process(target=run, args=args)
+        processes.append(p)
+        print "Currently running %s scheduler processes" % (len(processes))
+        p.start()
+        print "Processes started"
+    for p in processes:
+        try:
+            p.join()
+        except KeyboardInterrupt:
+            p.terminate()
+            p.join()
+
 
 def start(cron=True):
     """ Start server  """
@@ -758,22 +822,24 @@ def start(cron=True):
 
     (options, args) = console()
 
-    print ProgramName
-    print ProgramAuthor
-    print ProgramVersion
+    if not options.nobanner:
+        print ProgramName
+        print ProgramAuthor
+        print ProgramVersion
 
     from dal import drivers
-    print 'Database drivers available: %s' % ', '.join(drivers)
+    if not options.nobanner:
+        print 'Database drivers available: %s' % ', '.join(drivers)
 
 
     # ## if -L load options from options.config file
     if options.config:
         try:
-            options2 = __import__(options.config, [], [], '')
+            options2 = __import__(options.config, {}, {}, '')
         except Exception:
             try:
                 # Jython doesn't like the extra stuff
-                options = __import__(options.config)
+                options2 = __import__(options.config)
             except Exception:
                 print 'Cannot import config file [%s]' % options.config
                 sys.exit(1)
@@ -786,11 +852,19 @@ def start(cron=True):
         test(options.test, verbose=options.verbose)
         return
 
+    # ## if -K
+    if options.scheduler:
+        try:
+            start_schedulers(options)
+        except KeyboardInterrupt:
+            pass
+        return
+
     # ## if -S start interactive shell (also no cron)
     if options.shell:
-        if options.args!=None:
+        if not options.args is None:
             sys.argv[:] = options.args
-        run(options.shell, plain=options.plain,
+        run(options.shell, plain=options.plain, bpython=options.bpython,
             import_models=options.import_models, startfile=options.run)
         return
 
@@ -870,16 +944,17 @@ def start(cron=True):
     if not root and options.password == '<ask>':
         options.password = raw_input('choose a password:')
 
-    if not options.password:
+    if not options.password and not options.nobanner:
         print 'no password, no admin interface'
 
     # ## start server
 
     (ip, port) = (options.ip, int(options.port))
 
-    print 'please visit:'
-    print '\thttp://%s:%s' % (ip, port)
-    print 'use "kill -SIGTERM %i" to shutdown the web2py server' % os.getpid()
+    if not options.nobanner:
+        print 'please visit:'
+        print '\thttp://%s:%s' % (ip, port)
+        print 'use "kill -SIGTERM %i" to shutdown the web2py server' % os.getpid()
 
     server = main.HttpServer(ip=ip,
                              port=port,
@@ -889,11 +964,13 @@ def start(cron=True):
                              profiler_filename=options.profiler_filename,
                              ssl_certificate=options.ssl_certificate,
                              ssl_private_key=options.ssl_private_key,
+                             ssl_ca_certificate=options.ssl_ca_certificate,
                              min_threads=options.minthreads,
                              max_threads=options.maxthreads,
                              server_name=options.server_name,
                              request_queue_size=options.request_queue_size,
                              timeout=options.timeout,
+                             socket_timeout=options.socket_timeout,
                              shutdown_timeout=options.shutdown_timeout,
                              path=options.folder,
                              interfaces=options.interfaces)
@@ -903,3 +980,7 @@ def start(cron=True):
     except KeyboardInterrupt:
         server.stop()
     logging.shutdown()
+
+
+
+

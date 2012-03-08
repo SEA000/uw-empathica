@@ -7,6 +7,7 @@ try:
     import signal
     import os
     import shutil
+    from gluon.fileutils import read_file, write_file
 except:
     session.flash='sorry, only on Unix systems'
     redirect(URL(request.application,'default','site'))
@@ -35,27 +36,28 @@ def deploy():
         Field('appcfg',default=GAE_APPCFG,label='Path to appcfg.py',
               requires=EXISTS(error_message=T('file not found'))),
         Field('google_application_id',requires=IS_ALPHANUMERIC()),
-        Field('applications',requires=IS_IN_SET(apps,multiple=True),
+        Field('applications','list:string',
+              requires=IS_IN_SET(apps,multiple=True),
               label=T('web2py apps to deploy')),
         Field('email',requires=IS_EMAIL(),label=T('GAE Email')),
-        Field('password',requires=IS_NOT_EMPTY(),label=T('GAE Password')))
+        Field('password','password',requires=IS_NOT_EMPTY(),label=T('GAE Password')))
     cmd = output = errors= ""
     if form.accepts(request,session):
         try:
             kill()
         except:
             pass
-        ignore_apps = [item[1] for item in apps \
-                           if not item[1] in request.vars.applications]
+        ignore_apps = [item for item in apps \
+                           if not item in form.vars.applications]
         regex = re.compile('\(applications/\(.*')
         yaml = apath('../app.yaml', r=request)
         if not os.path.exists(yaml):
             example = apath('../app.example.yaml', r=request)
-            shutil.copyfile(example,yaml)            
-        data=open(yaml,'r').read()
+            shutil.copyfile(example,yaml)
+        data = read_file(yaml)
         data = re.sub('application:.*','application: %s' % form.vars.google_application_id,data)
         data = regex.sub('(applications/(%s)/.*)|' % '|'.join(ignore_apps),data)
-        open(yaml,'w').write(data)
+        write_file(yaml, data)
 
         path = request.env.applications_parent
         cmd = '%s --email=%s --passin update %s' % \
@@ -83,3 +85,5 @@ def callback():
     except:
         errors=''
     return (output+errors).replace('\n','<br/>')
+
+

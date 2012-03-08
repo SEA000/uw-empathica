@@ -42,6 +42,13 @@ routes_in = ((r'.*:/favicon.ico', r'/examples/static/favicon.ico'),
 routes_out = ((r'.*http://otherdomain.com.* /app/ctr(?P<any>.*)', r'\g<any>'),
               (r'/app(?P<any>.*)', r'\g<any>'))
 
+# Specify log level for rewrite's debug logging
+# Possible values: debug, info, warning, error, critical (loglevels),
+#                  off, print (print uses print statement rather than logging)
+# GAE users may want to use 'off' to suppress routine logging.
+#
+logging = 'debug'
+
 # Error-handling redirects all HTTP errors (status codes >= 400) to a specified
 # path.  If you wish to use error-handling redirects, uncomment the tuple
 # below.  You can customize responses by adding a tuple entry with the first
@@ -70,7 +77,7 @@ routes_out = ((r'.*http://otherdomain.com.* /app/ctr(?P<any>.*)', r'\g<any>'),
 # ErrorMessageTicket takes a string format dictionary containing (only) the
 # "ticket" key.
 
-# error_message = '<html><body><h1>Invalid request</h1></body></html>'
+# error_message = '<html><body><h1>%s</h1></body></html>'
 # error_message_ticket = '<html><body><h1>Internal error</h1>Ticket issued: <a href="/admin/default/ticket/%(ticket)s" target="_blank">%(ticket)s</a></body></html>'
 
 # specify a list of apps that bypass args-checking and use request.raw_args
@@ -163,3 +170,5 @@ def __routes_doctest():
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+

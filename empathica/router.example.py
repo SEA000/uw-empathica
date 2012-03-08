@@ -14,11 +14,16 @@
 #
 #  default_application: default application name
 #  applications: list of all recognized applications, or 'ALL' to use all currently installed applications
-#      Names in applications are always treated as an application names when they appear first in an incoming URL.
-#      Set applications=None to disable the removal of application names from outgoing URLs.
+#       Names in applications are always treated as an application names when they appear first in an incoming URL.
+#       Set applications=None to disable the removal of application names from outgoing URLs.
 #  domains: optional dict mapping domain names to application names
-#      The domain name can include a port number: domain.com:8080
-#      The application name can include a controller:  appx/ctlrx
+#       The domain name can include a port number: domain.com:8080
+#       The application name can include a controller:  appx/ctlrx
+#           or a controller and a function: appx/ctlrx/fcnx
+#       Example:
+#       domains = {   "domain.com" : "app",
+#                  "x.domain.com" : "appx",
+#                 },
 #  path_prefix: a path fragment that is prefixed to all outgoing URLs and stripped from all incoming URLs
 #
 #  Note: default_application, applications, domains & path_prefix are permitted only in the BASE router,
@@ -27,18 +32,20 @@
 #        or in application-specific routers.
 #
 #  default_controller: name of default controller
-#  default_function: name of default function (in all controllers)
+#  default_function: name of default function (in all controllers) or dictionary of default functions
+#       by controller
 #  controllers: list of valid controllers in selected app
 #       or "DEFAULT" to use all controllers in the selected app plus 'static'
 #       or None to disable controller-name removal.
 #      Names in controllers are always treated as controller names when they appear in an incoming URL after
-#      the (optional) application and language names. 
-#  functions: list of valid functions in the default controller (default None)
-#      If present, the default function name will be omitted when the controller is the default controller
-#      and the first arg does not create an ambiguity.
+#      the (optional) application and language names.
+#  functions: list of valid functions in the default controller (default None) or dictionary of valid
+#       functions by controller.
+#       If present, the default function name will be omitted when the controller is the default controller
+#       and the first arg does not create an ambiguity.
 #  languages: list of all supported languages
-#      Names in languages are always treated as language names when they appear in an incoming URL after
-#      the (optional) application name. 
+#       Names in languages are always treated as language names when they appear in an incoming URL after
+#       the (optional) application name.
 #  default_language
 #       The language code (for example: en, it-it) optionally appears in the URL following
 #       the application (which may be omitted). For incoming URLs, the code is copied to
@@ -49,14 +56,17 @@
 #       (mapped to the default application's static/ directory)
 #       Each default (including domain-mapped) application has its own root-static files.
 #  domain: the domain that maps to this application (alternative to using domains in the BASE router)
-#  map_hyphen: If True (default), hyphens in incoming /a/c/f fields are converted to underscores,
-#       and back to hyphens in outgoing URLs. Language, args and the query string are not affected.
-#  map_static: By default, the default application is not stripped from static URLs. 
+#  exclusive_domain: If True (default is False), an exception is raised if an attempt is made to generate
+#       an outgoing URL with a different application without providing an explicit host.
+#  map_hyphen: If True (default is False), hyphens in incoming /a/c/f fields are converted
+#       to underscores, and back to hyphens in outgoing URLs.
+#       Language, args and the query string are not affected.
+#  map_static: By default, the default application is not stripped from static URLs.
 #       Set map_static=True to override this policy.
 #  acfe_match: regex for valid application, controller, function, extension /a/c/f.e
 #  file_match: regex for valid file (used for static file names)
 #  args_match: regex for valid args
-#       This validation provides a measure of security. 
+#       This validation provides a measure of security.
 #       If it is changed, the application perform its own validation.
 #
 #
@@ -73,7 +83,7 @@
 #             languages = None,
 #         root_static = ['favicon.ico', 'robots.txt'],
 #         domains = None,
-#         map_hyphen = True,
+#         map_hyphen = False,
 #         acfe_match = r'\w+$',              # legal app/ctlr/fcn/ext
 #         file_match = r'(\w+[-=./]?)+$',    # legal file (path) name
 #         args_match = r'([\w@ -]+[=.]?)+$', # legal arg in args
@@ -93,6 +103,12 @@ routers = dict(
     ),
 )
 
+# Specify log level for rewrite's debug logging
+# Possible values: debug, info, warning, error, critical (loglevels),
+#                  off, print (print uses print statement rather than logging)
+# GAE users may want to use 'off' to suppress routine logging.
+#
+logging = 'debug'
 
 # Error-handling redirects all HTTP errors (status codes >= 400) to a specified
 # path.  If you wish to use error-handling redirects, uncomment the tuple
@@ -122,7 +138,7 @@ routers = dict(
 # ErrorMessageTicket takes a string format dictionary containing (only) the
 # "ticket" key.
 
-# error_message = '<html><body><h1>Invalid request</h1></body></html>'
+# error_message = '<html><body><h1>%s</h1></body></html>'
 # error_message_ticket = '<html><body><h1>Internal error</h1>Ticket issued: <a href="/admin/default/ticket/%(ticket)s" target="_blank">%(ticket)s</a></body></html>'
 
 def __routes_doctest():
@@ -176,7 +192,7 @@ def __routes_doctest():
     '/fcn#anchor'
     >>> filter_url('http://domain.com/welcome/default/fcn?query#anchor', out=True)
     '/fcn?query#anchor'
-    
+
     >>> filter_err(200)
     200
     >>> filter_err(399)
@@ -189,3 +205,5 @@ def __routes_doctest():
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+

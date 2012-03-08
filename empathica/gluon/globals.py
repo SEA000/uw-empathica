@@ -15,18 +15,16 @@ Contains the classes for the global used variables:
 """
 
 from storage import Storage, List
-from compileapp import run_view_in
 from streamer import streamer, stream_file_or_304_or_206, DEFAULT_CHUNK_SIZE
 from xmlrpc import handler
 from contenttype import contenttype
-from html import xmlescape
-from http import HTTP
+from html import xmlescape, TABLE, TR, PRE, URL
+from http import HTTP, redirect
 from fileutils import up
 from serializers import json, custom_json
 import settings
 from utils import web2py_uuid
 from settings import global_settings
-
 import hashlib
 import portalocker
 import cPickle
@@ -37,11 +35,24 @@ import Cookie
 import os
 import sys
 import traceback
+import threading
+
+try:
+    from gluon.contrib.minify import minify
+    have_minify = True
+except ImportError:
+    have_minify = False
 
 regex_session_id = re.compile('^([\w\-]+/)?[\w\-\.]+$')
 
 __all__ = ['Request', 'Response', 'Session']
 
+current = threading.local()  # thread-local storage for request-scope globals
+
+css_template = '<link href="%s" rel="stylesheet" type="text/css" />'
+js_template = '<script src="%s" type="text/javascript"></script>'
+css_inline = '<style type="text/css">\n%s\n</style>'
+js_inline = '<script type="text/javascript">\n%s\n</script>'
 
 class Request(Storage):
 
@@ -73,9 +84,42 @@ class Request(Storage):
         self.application = None
         self.function = None
         self.args = List()
-        self.extension = None
-        self.now = datetime.datetime.today()
+        self.extension = 'html'
+        self.now = datetime.datetime.now()
+        self.utcnow = datetime.datetime.utcnow()
         self.is_restful = False
+        self.is_https = False
+        self.is_local = False
+        self.global_settings = settings.global_settings
+
+    def compute_uuid(self):
+        self.uuid = '%s/%s.%s.%s' % (
+            self.application,
+            self.client.replace(':', '_'),
+            self.now.strftime('%Y-%m-%d.%H-%M-%S'),
+            web2py_uuid())
+        return self.uuid
+
+    def user_agent(self):
+        from gluon.contrib import user_agent_parser
+        session = current.session
+        user_agent = session._user_agent = session._user_agent or \
+            user_agent_parser.detect(self.env.http_user_agent)
+        user_agent = Storage(user_agent)
+        for key,value in user_agent.items():
+            if isinstance(value,dict): user_agent[key] = Storage(value)
+        return user_agent
+        
+    def requires_https(self):
+        """
+        If request comes in over HTTP, redirect it to HTTPS
+        and secure the session.
+        """
+        if not global_settings.cronjob and not self.is_https:
+            redirect(URL(scheme='https', args=self.args, vars=self.vars))
+        
+        current.session.secure()
+
     def restful(self):
         def wrapper(action,self=self):
             def f(_action=action,_self=self,*a,**b):
@@ -83,6 +127,8 @@ class Request(Storage):
                 method = _self.env.request_method
                 if len(_self.args) and '.' in _self.args[-1]:
                     _self.args[-1],_self.extension = _self.args[-1].rsplit('.',1)
+                    current.response.headers['Content-Type'] = \
+                        contenttype(_self.extension.lower())
                 if not method in ['GET','POST','DELETE','PUT']:
                     raise HTTP(400,"invalid method")
                 rest_action = _action().get(method,None)
@@ -112,14 +158,17 @@ class Response(Storage):
     def __init__(self):
         self.status = 200
         self.headers = Storage()
+        self.headers['X-Powered-By'] = 'web2py'
         self.body = cStringIO.StringIO()
         self.session_id = None
         self.cookies = Cookie.SimpleCookie()
         self.postprocessing = []
-        self.flash = ''           # used by the default view layout
-        self.meta = Storage()     # used by web2py_ajax.html
-        self.menu = []            # used by the default view layout
-        self.files = []           # used by web2py_ajax.html
+        self.flash = ''            # used by the default view layout
+        self.meta = Storage()      # used by web2py_ajax.html
+        self.menu = []             # used by the default view layout
+        self.files = []            # used by web2py_ajax.html
+        self.generic_patterns = [] # patterns to allow generic views
+        self.delimiters = ('{{','}}')
         self._vars = None
         self._caller = lambda f: f()
         self._view_environment = None
@@ -133,6 +182,7 @@ class Response(Storage):
             self.body.write(xmlescape(data))
 
     def render(self, *a, **b):
+        from compileapp import run_view_in
         if len(a) > 2:
             raise SyntaxError, 'Response.render can be called with two arguments, at most'
         elif len(a) == 2:
@@ -160,6 +210,54 @@ class Response(Storage):
             page = self.body.getvalue()
         return page
 
+    def include_meta(self):
+        s = ''
+        for key,value in (self.meta or {}).items():
+            s += '<meta name="%s" content="%s" />' % (key,xmlescape(value))
+        self.write(s,escape=False)
+
+    def include_files(self):
+
+
+        """
+        Caching method for writing out files.
+        By default, caches in ram for 5 minutes. To change,
+        response.cache_includes = (cache_method, time_expire).
+        Example: (cache.disk, 60) # caches to disk for 1 minute.
+        """
+        from gluon import URL
+
+        files = []
+        for item in self.files:
+            if not item in files: files.append(item)
+        if have_minify and (self.optimize_css or self.optimize_js):
+            # cache for 5 minutes by default
+            cache = self.cache_includes or (current.cache.ram, 60*5)
+            def call_minify():
+                return minify.minify(files,
+                                     URL('static','temp'),
+                                     current.request.folder,
+                                     self.optimize_css,
+                                     self.optimize_js)
+            if cache:
+                cache_model, time_expire = cache
+                files = cache_model('response.files.minified',
+                                    call_minify,
+                                    time_expire)
+            else:
+                files = call_minify()
+        s = ''
+        for item in files:
+            if isinstance(item,str):
+                f = item.lower()
+                if f.endswith('.css'):  s += css_template % item
+                elif f.endswith('.js'): s += js_template % item
+            elif isinstance(item,(list,tuple)):
+                f = item[0]
+                if f=='css:inline':     s += css_inline % item[1]
+                elif f=='js:inline':    s += js_inline % item[1]
+        self.write(s, escape=False)
+
     def stream(
         self,
         stream,
@@ -173,7 +271,8 @@ class Response(Storage):
 
         the file content will be streamed at 100 bytes at the time
         """
-
+        if not request:
+            request = current.request
         if isinstance(stream, (str, unicode)):
             stream_file_or_304_or_206(stream,
                                       chunk_size=chunk_size,
@@ -195,6 +294,14 @@ class Response(Storage):
                     os.path.getsize(filename)
             except OSError:
                 pass
+
+        # Internet Explorer < 9.0 will not allow downloads over SSL unless caching is enabled
+        if request.is_https and isinstance(request.env.http_user_agent,str) and \
+                not re.search(r'Opera', request.env.http_user_agent) and \
+                re.search(r'MSIE [5-8][^0-9]', request.env.http_user_agent):
+            self.headers['Pragma'] = 'cache'
+            self.headers['Cache-Control'] = 'private'
+
         if request and request.env.web2py_use_wsgi_file_wrapper:
             wrapped = request.env.wsgi_file_wrapper(stream, chunk_size)
         else:
@@ -256,6 +363,32 @@ class Response(Storage):
 
         return handler(request, self, methods)
 
+    def toolbar(self):
+        from html import DIV, SCRIPT, BEAUTIFY, TAG, URL
+        BUTTON = TAG.button
+        admin = URL("admin","default","design",
+                    args=current.request.application)
+        from gluon.dal import thread
+        if hasattr(thread,'instances'):
+            dbstats = [TABLE(*[TR(PRE(row[0]),'%.2fms' % (row[1]*1000)) \
+                                   for row in i.db._timings]) \
+                           for i in thread.instances]
+        else:
+            dbstats = [] # if no db or on GAE
+        u = web2py_uuid()
+        return DIV(
+            BUTTON('design',_onclick="document.location='%s'" % admin),
+            BUTTON('request',_onclick="jQuery('#request-%s').slideToggle()"%u),
+            DIV(BEAUTIFY(current.request),_class="hidden",_id="request-%s"%u),
+            BUTTON('session',_onclick="jQuery('#session-%s').slideToggle()"%u),
+            DIV(BEAUTIFY(current.session),_class="hidden",_id="session-%s"%u),
+            BUTTON('response',_onclick="jQuery('#response-%s').slideToggle()"%u),
+            DIV(BEAUTIFY(current.response),_class="hidden",_id="response-%s"%u),
+            BUTTON('db stats',_onclick="jQuery('#db-stats-%s').slideToggle()"%u),
+            DIV(BEAUTIFY(dbstats),_class="hidden",_id="db-stats-%s"%u),
+            SCRIPT("jQuery('.hidden').hide()")
+            )
+
 class Session(Storage):
 
     """
@@ -289,7 +422,7 @@ class Session(Storage):
             if global_settings.db_sessions is True or masterapp in global_settings.db_sessions:
                 return
             response.session_new = False
-            client = request.client.replace(':', '.')
+            client = request.client and request.client.replace(':', '.')
             if response.session_id_name in request.cookies:
                 response.session_id = \
                     request.cookies[response.session_id_name].value
@@ -303,16 +436,19 @@ class Session(Storage):
                 try:
                     response.session_file = \
                         open(response.session_filename, 'rb+')
-                    portalocker.lock(response.session_file,
-                            portalocker.LOCK_EX)
-                    response.session_locked = True
-                    self.update(cPickle.load(response.session_file))
-                    response.session_file.seek(0)
-                    oc = response.session_filename.split('/')[-1].split('-')[0]
-                    if check_client and client!=oc:
-                        raise Exception, "cookie attack"
+                    try:
+                        portalocker.lock(response.session_file,portalocker.LOCK_EX)
+                        response.session_locked = True
+                        self.update(cPickle.load(response.session_file))
+                        response.session_file.seek(0)
+                        oc = response.session_filename.split('/')[-1].split('-')[0]
+                        if check_client and client!=oc:
+                            raise Exception, "cookie attack"
+                    finally:
+                        pass
+                        #This causes admin login to break. Must find out why.
+                        #self._close(response)
                 except:
-                    self._close(response)
                     response.session_id = None
             if not response.session_id:
                 uuid = web2py_uuid()
@@ -415,7 +551,7 @@ class Session(Storage):
 
         (record_id_name, table, record_id, unique_key) = \
             response._dbtable_and_field
-        dd = dict(locked=False, client_ip=request.env.remote_addr,
+        dd = dict(locked=False, client_ip=request.client.replace(':','.'),
                   modified_datetime=request.now,
                   session_data=cPickle.dumps(dict(self)),
                   unique_key=unique_key)
@@ -475,3 +611,6 @@ class Session(Storage):
                 del response.session_file
             except:
                 pass
+
+
+

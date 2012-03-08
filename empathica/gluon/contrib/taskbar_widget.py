@@ -241,3 +241,7 @@ class TaskBarIcon:
 
         RUNNING = 0
         STOPPED = 1
+
+
+
+

@@ -6,7 +6,7 @@ License: LGPLv3 (http://www.gnu.org/licenses/lgpl.html)
 
 Attention: Requires Chrome or Safari. For IE of Firefox you need https://github.com/gimite/web-socket-js
 
-1) install tornado
+1) install tornado (requires Tornado 2.1)
 
    easy_install tornado
 
@@ -130,7 +130,7 @@ class DistributeHandler(tornado.websocket.WebSocketHandler):
         group,token,name = params.split('/')+[None,None]
         self.group = group or 'default'
         self.token = token or 'none'
-        self.name = name or 'anonymous'     
+        self.name = name or 'anonymous'
         # only authorized parties can join
         if DistributeHandler.tokens:
             if not self.token in tokens or not token[self.token]==None:
@@ -188,3 +188,7 @@ if __name__ == "__main__":
     http_server = tornado.httpserver.HTTPServer(application)
     http_server.listen(int(options.port), address=options.address)
     tornado.ioloop.IOLoop.instance().start()
+
+
+
+

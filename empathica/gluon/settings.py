@@ -8,3 +8,7 @@ from storage import Storage
 
 global_settings = Storage()
 settings = global_settings  # legacy compatibility
+
+
+
+

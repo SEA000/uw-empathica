@@ -3,6 +3,8 @@ clean:
 	rm -f parameters*.py 
 	rm -f -r applications/*/compiled     	
 	find ./ -name '*~' -exec rm -f {} \; 
+	find ./ -name '*.orig' -exec rm -f {} \; 
+	find ./ -name '*.rej' -exec rm -f {} \; 
 	find ./ -name '#*' -exec rm -f {} \;
 	find ./ -name 'Thumbs.db' -exec rm -f {} \; 
 	find ./gluon/ -name '.*' -exec rm -f {} \;
@@ -22,8 +24,11 @@ epydoc:
 	cp applications/examples/static/title.png applications/examples/static/epydoc
 tests:
 	cd gluon/tests; ./test.sh 1>tests.log 2>&1 
+update:
+	wget -O gluon/contrib/feedparser.py http://feedparser.googlecode.com/svn/trunk/feedparser/feedparser.py
+	wget -O gluon/contrib/simplejsonrpc.py http://rad2py.googlecode.com/hg/ide2py/simplejsonrpc.py
 src:
-	echo 'Version 1.94.6 ('`date +%Y-%m-%d\ %H:%M:%S`')' > VERSION
+	echo 'Version 1.99.7 ('`date +%Y-%m-%d\ %H:%M:%S`') stable' > VERSION
 	### rm -f all junk files
 	make clean
 	### clean up baisc apps
@@ -42,15 +47,10 @@ src:
 	cp applications/admin/views/appadmin.html applications/examples/views
 	cp applications/admin/controllers/appadmin.py applications/welcome/controllers
 	cp applications/admin/controllers/appadmin.py applications/examples/controllers	
-	### update the license
-	cp ABOUT applications/admin/
-	cp ABOUT applications/examples/
-	cp LICENSE applications/admin/
-	cp LICENSE applications/examples/
 	### build web2py_src.zip
 	echo '' > NEWINSTALL
 	mv web2py_src.zip web2py_src_old.zip | echo 'no old'
-	cd ..; zip -r web2py/web2py_src.zip web2py/gluon/*.py web2py/gluon/contrib/* web2py/splashlogo.gif web2py/*.py web2py/ABOUT  web2py/LICENSE web2py/README web2py/NEWINSTALL web2py/VERSION web2py/Makefile web2py/epydoc.css web2py/epydoc.conf web2py/app.example.yaml web2py/logging.example.conf web2py/queue.example.yaml mkweb2pyenv startweb2py web2py/scripts/*.sh web2py/scripts/*.py web2py/applications/admin web2py/applications/examples/ web2py/applications/welcome web2py/applications/__init__.py 
+	cd ..; zip -r web2py/web2py_src.zip web2py/gluon/*.py web2py/gluon/contrib/* web2py/splashlogo.gif web2py/*.py web2py/README  web2py/LICENSE web2py/CHANGELOG web2py/NEWINSTALL web2py/VERSION web2py/Makefile web2py/epydoc.css web2py/epydoc.conf web2py/app.example.yaml web2py/logging.example.conf web2py_exe.conf web2py/queue.example.yaml MANIFEST.in w2p_apps w2p_clone w2p_run startweb2py web2py/scripts/*.sh web2py/scripts/*.py web2py/applications/admin web2py/applications/examples/ web2py/applications/welcome web2py/applications/__init__.py web2py/site-packages/__init__.py web2py/gluon/tests/*.sh web2py/gluon/tests/*.py
 
 mdp:
 	make epydoc
@@ -64,11 +64,11 @@ app:
 	find gluon -path '*.pyc' -exec cp {} ../web2py_osx/site-packages/{} \;
 	cd ../web2py_osx/site-packages/; zip -r ../site-packages.zip *
 	mv ../web2py_osx/site-packages.zip ../web2py_osx/web2py/web2py.app/Contents/Resources/lib/python2.5
-	cp ABOUT ../web2py_osx/web2py/web2py.app/Contents/Resources
+	cp README ../web2py_osx/web2py/web2py.app/Contents/Resources
 	cp NEWINSTALL ../web2py_osx/web2py/web2py.app/Contents/Resources
 	cp LICENSE ../web2py_osx/web2py/web2py.app/Contents/Resources
 	cp VERSION ../web2py_osx/web2py/web2py.app/Contents/Resources
-	cp README ../web2py_osx/web2py/web2py.app/Contents/Resources
+	cp CHANGELOG ../web2py_osx/web2py/web2py.app/Contents/Resources
 	cp splashlogo.gif ../web2py_osx/web2py/web2py.app/Contents/Resources
 	cp options_std.py ../web2py_osx/web2py/web2py.app/Contents/Resources
 	cp routes.example.py ../web2py_osx/web2py/web2py.app/Contents/Resources
@@ -87,11 +87,11 @@ win:
 	find gluon -path '*.pyc' -exec cp {} ../web2py_win/library/{} \;
 	cd ../web2py_win/library/; zip -r ../library.zip *
 	mv ../web2py_win/library.zip ../web2py_win/web2py
-	cp ABOUT ../web2py_win/web2py/
+	cp README ../web2py_win/web2py/
 	cp NEWINSTALL ../web2py_win/web2py/
 	cp LICENSE ../web2py_win/web2py/
 	cp VERSION ../web2py_win/web2py/
-	cp README ../web2py_win/web2py/
+	cp CHANGELOG ../web2py_win/web2py/
 	cp splashlogo.gif ../web2py_win/web2py/
 	cp options_std.py ../web2py_win/web2py/
 	cp routes.example.py ../web2py_win/web2py/
@@ -104,11 +104,19 @@ win:
 	cp applications/__init__.py ../web2py_win/web2py/applications
 	cd ../web2py_win; zip -r web2py_win.zip web2py
 	mv ../web2py_win/web2py_win.zip .
+pip:
+	# create Web2py distribution for upload to Pypi
+	# after upload clean Web2py sources with rm -R ./dist
+	python setup.py sdist
 run:
 	python2.5 web2py.py -a hello
-push:
+commit:
 	make src
 	echo '' > NEWINSTALL
+	hg commit -m "$(S)"
+	#bzr commit -m "$(S)"
+	git commit -a -m "$(S)"
+push:
 	hg push
-	bzr push bzr+ssh://mdipierro@bazaar.launchpad.net/~mdipierro/web2py/devel --use-existing-dir
-
+	git push
+	#bzr push bzr+ssh://mdipierro@bazaar.launchpad.net/~mdipierro/web2py/devel --use-existing-dir

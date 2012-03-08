@@ -13,15 +13,15 @@ def rgb(col):
     return (col // 65536), (col // 256 % 256), (col% 256)
 
 class Template:
-    def __init__(self, infile=None, elements=None, format='A4',
+    def __init__(self, infile=None, elements=None, format='A4', orientation='portrait',
                  title='', author='', subject='', creator='', keywords=''):
         if elements:
             self.elements = dict([(v['name'].lower(),v) for v in elements])
         self.handlers = {'T': self.text, 'L': self.line, 'I': self.image,
-                         'B': self.rect, 'BC': self.barcode}
+                         'B': self.rect, 'BC': self.barcode, }
         self.pg_no = 0
         self.texts = {}
-        pdf = self.pdf = FPDF(format=format,unit="mm")
+        pdf = self.pdf = FPDF(format=format,orientation=orientation, unit="mm")
         pdf.set_title(title)
         pdf.set_author(author)
         pdf.set_creator(creator)
@@ -34,20 +34,23 @@ class Template:
             'bold','italic','underline','foreground','background',
             'align','text','priority')
         self.elements = {}
-        for row in csv.reader(open(infile, 'rb'), delimiter=delimiter):
-            kargs = {}
-            for i,v in enumerate(row):
-                if not v.startswith("'") and decimal_sep!=".":
-                    v = v.replace(decimal_sep,".")
-                else:
-                    v = v
-                if v=='':
-                    v = None
-                else:
-                    v = eval(v.strip())
-                kargs[keys[i]] = v
-            self.elements[kargs['name'].lower()] = kargs
-
+        f = open(infile, 'rb')
+        try:
+            for row in csv.reader(f, delimiter=delimiter):
+                kargs = {}
+                for i,v in enumerate(row):
+                    if not v.startswith("'") and decimal_sep!=".":
+                        v = v.replace(decimal_sep,".")
+                    else:
+                        v = v
+                    if v=='':
+                        v = None
+                    else:
+                        v = eval(v.strip())
+                    kargs[keys[i]] = v
+                self.elements[kargs['name'].lower()] = kargs
+        finally:
+            f.close()
 
     def add_page(self):
         self.pg_no += 1
@@ -61,6 +64,13 @@ class Template:
                 value = str(value)
             self.texts[self.pg_no][name.lower()] = value
 
+    # setitem shortcut (may be further extended)
+    set = __setitem__
+
+    def __getitem__(self, name):
+        if name.lower() in self.elements:
+            return self.texts[self.pg_no].get(name.lower(), self.elements[name.lower()]['text'])
+
     def split_multicell(self, text, element_name):
         "Divide (\n) a string using a given element width"
         pdf = self.pdf
@@ -71,6 +81,10 @@ class Template:
         if element['underline']: style += "U"
         pdf.set_font(element['font'],style,element['size'])
         align = {'L':'L','R':'R','I':'L','D':'R','C':'C','':''}.get(element['align']) # D/I in spanish
+        if isinstance(text, unicode):
+            text = text.encode("latin1","ignore")
+        else:
+            text = str(text)
         return pdf.multi_cell(w=element['x2']-element['x1'],
                              h=element['y2']-element['y1'],
                              txt=text,align=align,split_only=True)
@@ -86,7 +100,11 @@ class Template:
                 #print "dib",element['type'], element['name'], element['x1'], element['y1'], element['x2'], element['y2']
                 element = element.copy()
                 element['text'] = self.texts[pg].get(element['name'].lower(), element['text'])
+                if 'rotate' in element:
+                    pdf.rotate(element['rotate'], element['x1'], element['y1'])
                 self.handlers[element['type'].upper()](pdf, **element)
+                if 'rotate' in element:
+                    pdf.rotate(0)
 
         return pdf.output(outfile, dest)
 
@@ -256,3 +274,5 @@ if __name__ == "__main__":
         os.system("evince ./invoice.pdf")
     else:
         os.system("./invoice.pdf")
+
+

@@ -121,7 +121,11 @@ class AIM:
             self.results += str(urllib.urlopen(url, encoded_args).read()).split(self.delimiter)
         else:
             opener = urllib.FancyURLopener(self.proxy)
-            self.results += str(opener.open(url, encoded_args).read()).split(self.delimiter)
+            opened = opener.open(url, encoded_args)
+            try:
+                self.results += str(opened.read()).split(self.delimiter)
+            finally:
+                opened.close()
         Results = namedtuple('Results', 'ResultResponse ResponseSubcode ResponseCode ResponseText AuthCode \
                                           AVSResponse TransactionID InvoiceNumber Description Amount PaymentMethod \
                                           TransactionType CustomerID CHFirstName CHLastName Company BillingAddress \
@@ -190,6 +194,16 @@ class AIM:
         responses = ['', 'Approved', 'Declined', 'Error']
         return responses[int(self.results[0])]
 
+def process(creditcard,expiration,total,cvv=None,tax=None,invoice=None,
+            login='cnpdev4289', transkey='SR2P8g4jdEn7vFLQ',testmode=True):
+    payment = AIM(login,transkey,testmode)
+    expiration = expiration.replace('/','')
+    payment.setTransaction(creditcard, expiration, total, cvv, tax, invoice)
+    try:
+        payment.process()
+        return payment.isApproved()
+    except AIM.AIMError:
+        return False
 
 def test():
     import socket
@@ -243,3 +257,7 @@ def test():
 
 if __name__=='__main__':
     test()
+
+
+
+

@@ -15,6 +15,7 @@ from shutil import rmtree
 from utils import web2py_uuid
 from fileutils import w2p_pack, w2p_unpack, w2p_pack_plugin, w2p_unpack_plugin
 from fileutils import up, fix_newlines, abspath, recursive_unlink
+from fileutils import read_file, write_file, parse_version
 from restricted import RestrictedError
 from settings import global_settings
 
@@ -101,28 +102,30 @@ def app_cleanup(app, request):
 
     # Remove error files
     path = apath('%s/errors/' % app, request)
-    for f in os.listdir(path):
-        try:
-            os.unlink(os.path.join(path,f))
-        except IOError:
-            r = False
+    if os.path.exists(path):
+        for f in os.listdir(path):
+            try:
+                if f[:1]!='.': os.unlink(os.path.join(path,f))
+            except IOError:
+                r = False
 
     # Remove session files
     path = apath('%s/sessions/' % app, request)
-    for f in os.listdir(path):
-        try:
-            recursive_unlink(os.path.join(path,f))
-        except IOError:
-            r = False
+    if os.path.exists(path):
+        for f in os.listdir(path):
+            try:
+                if f[:1]!='.': recursive_unlink(os.path.join(path,f))
+            except IOError:
+                r = False
 
     # Remove cache files
     path = apath('%s/sessions/' % app, request)
-    for f in os.listdir(path):
-        try:
-            os.unlink(os.path.join(path,f))
-        except IOError:
-            r = False
-
+    if os.path.exists(path):
+        for f in os.listdir(path):
+            try:
+                if f[:1]!='.': os.unlink(os.path.join(path,f))
+            except IOError:
+                r = False
     return r
 
 
@@ -175,14 +178,10 @@ def app_create(app, request,force=False,key=None):
                 os.mkdir(subpath)
         db = os.path.join(path, 'models', 'db.py')
         if os.path.exists(db):
-            fp = open(db,'r')
-            data = fp.read()
-            fp.close()
+            data = read_file(db)
             data = data.replace('<your secret key>',
                                 'sha512:'+(key or web2py_uuid()))
-            fp = open(db,'w')
-            fp.write(data)
-            fp.close()
+            write_file(db, data)
         return True
     except:
         rmtree(path)
@@ -223,9 +222,7 @@ def app_install(app, fobj, request, filename, overwrite=None):
     upname = apath('../deposit/%s.%s' % (app, extension), request)
 
     try:
-        upfile = open(upname, 'wb')
-        upfile.write(fobj.read())
-        upfile.close()
+        write_file(upname, fobj.read(), 'wb')
         path = apath(app, request)
         if not overwrite:
             os.mkdir(path)
@@ -317,9 +314,7 @@ def plugin_install(app, fobj, request, filename):
     upname = apath('../deposit/%s' % filename, request)
 
     try:
-        upfile = open(upname, 'wb')
-        upfile.write(fobj.read())
-        upfile.close()
+        write_file(upname, fobj.read(), 'wb')
         path = apath(app, request)
         w2p_unpack_plugin(upname, path)
         fix_newlines(path)
@@ -349,7 +344,7 @@ def check_new_version(myversion, version_URL):
     """
     try:
         from urllib import urlopen
-        version = urlopen(version_URL).read()
+        version = parse_version(urlopen(version_URL).read())
     except Exception:
         return -1, myversion
 
@@ -379,9 +374,7 @@ def unzip(filename, dir, subfolder=''):
             if not os.path.exists(folder):
                 os.mkdir(folder)
         else:
-            outfile = open(os.path.join(dir, name[n:]), 'wb')
-            outfile.write(zf.read(name))
-            outfile.close()
+            write_file(os.path.join(dir, name[n:]), zf.read(name), 'wb')
 
 
 def upgrade(request, url='http://web2py.com'):
@@ -426,11 +419,8 @@ def upgrade(request, url='http://web2py.com'):
     filename = abspath('web2py_%s_downloaded.zip' % version_type)
     file = None
     try:
-        file = open(filename,'wb')
-        file.write(urllib.urlopen(full_url).read())
-        file.close()
+        write_file(filename, urllib.urlopen(full_url).read(), 'wb')
     except Exception,e:
-        file and file.close()
         return False, e
     try:
         unzip(filename, destination, subfolder)
@@ -460,3 +450,7 @@ def create_missing_app_folders(request):
                 if not os.path.exists(path):
                     os.mkdir(path)
             global_settings.app_folders.add(request.folder)
+
+
+
+

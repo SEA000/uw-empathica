@@ -244,6 +244,7 @@ CONTENT_TYPE = {
     '.jpx': 'image/jp2',
     '.js': 'application/javascript',
     '.json': 'application/json',
+    '.jsonp': 'application/jsonp',
     '.k25': 'image/x-kodak-k25',
     '.kar': 'audio/midi',
     '.karbon': 'application/x-karbon',
@@ -422,6 +423,7 @@ CONTENT_TYPE = {
     '.pict': 'image/x-pict',
     '.pict1': 'image/x-pict',
     '.pict2': 'image/x-pict',
+    '.pickle': 'application/python-pickle',
     '.pk': 'application/x-tex-pk',
     '.pkipath': 'application/pkix-pkipath',
     '.pkr': 'application/pgp-keys',
@@ -631,6 +633,7 @@ CONTENT_TYPE = {
     '.wbmp': 'image/vnd.wap.wbmp',
     '.wcm': 'application/vnd.ms-works',
     '.wdb': 'application/vnd.ms-works',
+    '.webm': 'video/webm',
     '.wk1': 'application/vnd.lotus-1-2-3',
     '.wk3': 'application/vnd.lotus-1-2-3',
     '.wk4': 'application/vnd.lotus-1-2-3',
@@ -714,3 +717,7 @@ def contenttype(filename, default='text/plain'):
     if default.startswith('text/'):
         default += '; charset=utf-8'
     return default
+
+
+
+

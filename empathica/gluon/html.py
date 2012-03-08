@@ -19,6 +19,7 @@ import rewrite
 import itertools
 import decoder
 import copy_reg
+import cPickle
 import marshal
 from HTMLParser import HTMLParser
 from htmlentitydefs import name2codepoint
@@ -26,12 +27,11 @@ from contrib.markmin.markmin2html import render
 
 from storage import Storage
 from highlight import highlight
-from utils import web2py_uuid
-
-import hmac
-import hashlib
+from utils import web2py_uuid, hmac_hash
 
 regex_crlf = re.compile('\r|\n')
+
+join = ''.join
 
 __all__ = [
     'A',
@@ -39,8 +39,12 @@ __all__ = [
     'BEAUTIFY',
     'BODY',
     'BR',
+    'BUTTON',
     'CENTER',
+    'CAT',
     'CODE',
+    'COL',
+    'COLGROUP',
     'DIV',
     'EM',
     'EMBED',
@@ -120,22 +124,31 @@ def xmlescape(data, quote = True):
     return data
 
 
+def truncate_string(text, length, dots='...'):
+    text = text.decode('utf-8')
+    if len(text)>length:
+        text = text[:length-len(dots)].encode('utf-8')+dots
+    return text
+
 def URL(
     a=None,
     c=None,
     f=None,
     r=None,
-    args=[],
-    vars={},
+    args=None,
+    vars=None,
     anchor='',
     extension=None,
     env=None,
     hmac_key=None,
     hash_vars=True,
-    _request=None,
+    salt=None,
+    user_signature=None,
     scheme=None,
     host=None,
     port=None,
+    encode_embedded_slash=False,
+    url_encode=True
     ):
     """
     generate a URL
@@ -159,7 +172,31 @@ def URL(
 
         >>> str(URL(a='a', c='c', f='f', args=['x', 'y', 'z'],
         ...     vars={'p':(1,3), 'q':2}, anchor='1', hmac_key='key'))
-        '/a/c/f/x/y/z?p=1&p=3&q=2&_signature=5d06bb8a4a6093dd325da2ee591c35c61afbd3c6#1'
+        '/a/c/f/x/y/z?p=1&p=3&q=2&_signature=a32530f0d0caa80964bb92aad2bedf8a4486a31f#1'
+
+        >>> str(URL(a='a', c='c', f='f', args=['w/x', 'y/z']))
+        '/a/c/f/w/x/y/z'
+
+        >>> str(URL(a='a', c='c', f='f', args=['w/x', 'y/z'], encode_embedded_slash=True))
+        '/a/c/f/w%2Fx/y%2Fz'
+
+        >>> str(URL(a='a', c='c', f='f', args=['%(id)d'], url_encode=False))
+        '/a/c/f/%(id)d'
+
+        >>> str(URL(a='a', c='c', f='f', args=['%(id)d'], url_encode=True))
+        '/a/c/f/%25%28id%29d'
+
+        >>> str(URL(a='a', c='c', f='f', vars={'id' : '%(id)d' }, url_encode=False))
+        '/a/c/f?id=%(id)d'
+
+        >>> str(URL(a='a', c='c', f='f', vars={'id' : '%(id)d' }, url_encode=True))
+        '/a/c/f?id=%25%28id%29d'
+        
+        >>> str(URL(a='a', c='c', f='f', anchor='%(id)d', url_encode=False))
+        '/a/c/f#%(id)d'
+
+        >>> str(URL(a='a', c='c', f='f', anchor='%(id)d', url_encode=True))
+        '/a/c/f#%25%28id%29d'
 
     generates a url '/a/c/f' corresponding to application a, controller c
     and function f. If r=request is passed, a, c, f are set, respectively,
@@ -181,7 +218,6 @@ def URL(
     :param hash_vars: which of the vars to include in our hmac signature
         True (default) - hash all vars, False - hash none of the vars,
         iterable - hash only the included vars ['key1','key2']
-    :param _request: used internally for URL rewrite
     :param scheme: URI scheme (True, 'http' or 'https', etc); forces absolute URL (optional)
     :param host: string to force absolute URL with host (True means http_host)
     :param port: optional port number (forces absolute URL)
@@ -191,10 +227,21 @@ def URL(
     :raises SyntaxError: when a CRLF is found in the generated url
     """
 
-    args = args or []
+    if args in (None,[]): args = []
     vars = vars or {}
+    application = None
+    controller = None
+    function = None
 
-    application = controller = function = None
+    if not isinstance(args, (list, tuple)):
+        args = [args]
+
+    if not r:
+        if a and not c and not f: (f,a,c)=(a,c,f)
+        elif a and c and not f: (c,f,a)=(a,c,f)
+        from globals import current
+        if hasattr(current,'request'):
+            r = current.request
     if r:
         application = r.application
         controller = r.controller
@@ -208,18 +255,35 @@ def URL(
         controller = c
     if f:
         if not isinstance(f, str):
-            function = f.__name__
-        elif '.' in f:
-            function, extension = f.split('.', 1)
+            if hasattr(f,'__name__'):
+                function = f.__name__
+            else:
+                raise SyntaxError, 'when calling URL, function or function name required'
+        elif '/' in f:
+            items = f.split('/')
+            function = f = items[0]
+            args = items[1:] + args
         else:
             function = f
+        if '.' in function:
+            function, extension = function.split('.', 1)
+
+    function2 = '%s.%s' % (function,extension or 'html')
 
     if not (application and controller and function):
         raise SyntaxError, 'not enough information to build the url'
 
-    if not isinstance(args, (list, tuple)):
-        args = [args]
-    other = args and urllib.quote('/' + '/'.join([str(x) for x in args])) or ''
+    if args:
+        if url_encode:
+            if encode_embedded_slash:
+                other = '/' + '/'.join([urllib.quote(str(x), '') for x in args])
+            else:
+                other = args and urllib.quote('/' + '/'.join([str(x) for x in args]))
+        else:
+            other = args and ('/' + '/'.join([str(x) for x in args]))
+    else:
+        other = ''
+
     if other.endswith('/'):
         other += '/'    # add trailing slash to make last trailing empty arg explicit
 
@@ -231,11 +295,16 @@ def URL(
         for val in vals:
             list_vars.append((key, val))
 
+    if user_signature:
+        from globals import current
+        if current.session.auth:
+            hmac_key = current.session.auth.hmac_key
+
     if hmac_key:
         # generate an hmac signature of the vars & args so can later
         # verify the user hasn't messed with anything
 
-        h_args = '/%s/%s/%s%s' % (application, controller, function, other)
+        h_args = '/%s/%s/%s%s' % (application, controller, function2, other)
 
         # how many of the vars should we include in our hash?
         if hash_vars is True:       # include them all
@@ -250,23 +319,31 @@ def URL(
         # re-assembling the same way during hash authentication
         message = h_args + '?' + urllib.urlencode(sorted(h_vars))
 
-        sig = hmac.new(hmac_key,message, hashlib.sha1).hexdigest()
+        sig = hmac_hash(message, hmac_key, digest_alg='sha1', salt=salt)
         # add the signature into vars
-        vars['_signature'] = sig
         list_vars.append(('_signature', sig))
 
+    if list_vars:
+        if url_encode:
+            other += '?%s' % urllib.urlencode(list_vars)
+        else:
+            other += '?%s' % '&'.join([var[0]+'='+var[1] for var in list_vars])
+    if anchor:
+        if url_encode:
+            other += '#' + urllib.quote(str(anchor))
+        else:
+            other += '#' + (str(anchor))
     if extension:
         function += '.' + extension
-    if vars:
-        other += '?%s' % urllib.urlencode(list_vars)
-    if anchor:
-        other += '#' + urllib.quote(str(anchor))
 
-    if regex_crlf.search(''.join([application, controller, function, other])):
+    if regex_crlf.search(join([application, controller, function, other])):
         raise SyntaxError, 'CRLF Injection Detected'
-    return XML(rewrite.url_out(r or _request, env, application, controller, function, args, other, scheme, host, port))
+    url = rewrite.url_out(r, env, application, controller, function,
+                          args, other, scheme, host, port)
+    return url
 
-def verifyURL(request, hmac_key, hash_vars=True):
+
+def verifyURL(request, hmac_key=None, hash_vars=True, salt=None, user_signature=None):
     """
     Verifies that a request's args & vars have not been tampered with by the user
 
@@ -274,8 +351,9 @@ def verifyURL(request, hmac_key, hash_vars=True):
     :param hmac_key: the key to authenticate with, must be the same one previously
                     used when calling URL()
     :param hash_vars: which vars to include in our hashing. (Optional)
-                    Only uses the 1st value currently (it's really a hack for the _gURL.verify lambda)
-                    True (or undefined) means all, False none, an iterable just the specified keys
+                    Only uses the 1st value currently
+                    True (or undefined) means all, False none,
+                    an iterable just the specified keys
 
     do not call directly. Use instead:
 
@@ -284,8 +362,8 @@ def verifyURL(request, hmac_key, hash_vars=True):
     the key has to match the one used to generate the URL.
 
         >>> r = Storage()
-        >>> gv = Storage(p=(1,3),q=2,_signature='5d06bb8a4a6093dd325da2ee591c35c61afbd3c6')
-        >>> r.update(dict(application='a', controller='c', function='f'))
+        >>> gv = Storage(p=(1,3),q=2,_signature='a32530f0d0caa80964bb92aad2bedf8a4486a31f')
+        >>> r.update(dict(application='a', controller='c', function='f', extension='html'))
         >>> r['args'] = ['x', 'y', 'z']
         >>> r['get_vars'] = gv
         >>> verifyURL(r, 'key')
@@ -304,6 +382,15 @@ def verifyURL(request, hmac_key, hash_vars=True):
     if not request.get_vars.has_key('_signature'):
         return False # no signature in the request URL
 
+    # check if user_signature requires
+    if user_signature:
+        from globals import current
+        if not current.session or not current.session.auth:
+            return False
+        hmac_key = current.session.auth.hmac_key
+    if not hmac_key:
+        return False
+
     # get our sig from request.get_vars for later comparison
     original_sig = request.get_vars._signature
 
@@ -317,9 +404,11 @@ def verifyURL(request, hmac_key, hash_vars=True):
 
     # always include all of the args
     other = args and urllib.quote('/' + '/'.join([str(x) for x in args])) or ''
-    h_args = '/%s/%s/%s%s' % (request.application,
-                              request.controller,
-                              request.function, other)
+    h_args = '/%s/%s/%s.%s%s' % (request.application,
+                                 request.controller,
+                                 request.function,
+                                 request.extension,
+                                 other)
 
     # but only include those vars specified (allows more flexibility for use with
     # forms or ajax)
@@ -347,8 +436,9 @@ def verifyURL(request, hmac_key, hash_vars=True):
             return False
     # build the full message string with both args & vars
     message = h_args + '?' + urllib.urlencode(sorted(h_vars))
+
     # hash with the hmac_key provided
-    sig = hmac.new(str(hmac_key), message, hashlib.sha1).hexdigest()
+    sig = hmac_hash(message, str(hmac_key), digest_alg='sha1', salt=salt)
 
     # put _signature back in get_vars just in case a second call to URL.verify is performed
     # (otherwise it'll immediately return false)
@@ -358,35 +448,7 @@ def verifyURL(request, hmac_key, hash_vars=True):
     # (I.E. was the message the same as the one we originally signed)
     return original_sig == sig
 
-def _gURL(request):
-    """
-    A proxy function for URL which contains knowledge
-    of a given request object.
-
-    Usage is exactly like URL except you do not have
-    to specify r=request!
-    """
-    def _URL(*args, **kwargs):
-        # If they use URL as just passing along
-        # args, we don't want to overwrite it and
-        # cause issues.
-        if not kwargs.has_key('r') and len(args) < 3:
-            kwargs['r'] = request
-            if len(args) == 1 and not 'f' in kwargs:
-                kwargs['f'] = args[0]
-                args = []
-            if len(args) == 2 and not 'f' in kwargs and not 'c' in kwargs:
-                kwargs['c'], kwargs['f'] = args[0], args[1]
-                args = []
-        kwargs['_request'] = request
-        return URL(*args, **kwargs)
-    _URL.__doc__ = URL.__doc__
-
-    # probably ugly work-around for the lambda call. Want for hash_vars to be an optional argument
-    _URL.verify = lambda request, hmac_key, *hash_vars: verifyURL(request, hmac_key, *hash_vars)
-
-    return _URL
-
+URL.verify = verifyURL
 
 ON = True
 
@@ -431,11 +493,14 @@ class XML(XmlComponent):
             'code',
             'pre',
             'img/',
+            'h1','h2','h3','h4','h5','h6',
+            'table','tr','td','div',
             ],
         allowed_attributes = {
             'a': ['href', 'title'],
             'img': ['src', 'alt'],
-            'blockquote': ['type']
+            'blockquote': ['type'],
+            'td': ['colspan'],
             },
         ):
         """
@@ -770,7 +835,7 @@ class DIV(XmlComponent):
             fa += ' %s="%s"' % (name, xmlescape(value, True))
 
         # get the xml for the inner components
-        co = ''.join([xmlescape(component) for component in
+        co = join([xmlescape(component) for component in
                      self.components])
 
         return (fa, co)
@@ -987,6 +1052,19 @@ class DIV(XmlComponent):
             return None
         return sibs[0]
 
+class CAT(DIV):
+
+    tag = ''
+
+def TAG_unpickler(data):
+    return cPickle.loads(data)
+
+def TAG_pickler(data):
+    d = DIV()
+    d.__dict__ = data.__dict__
+    marshal_dump = cPickle.dumps(d)
+    return (TAG_unpickler, (marshal_dump,))
+
 class __TAG__(XmlComponent):
 
     """
@@ -1007,7 +1085,7 @@ class __TAG__(XmlComponent):
             name = name.encode('utf-8')
         class __tag__(DIV):
             tag = name
-
+        copy_reg.pickle(__tag__, TAG_pickler, TAG_unpickler)
         return lambda *a, **b: __tag__(*a, **b)
 
     def __call__(self,html):
@@ -1250,12 +1328,35 @@ class HR(DIV):
 
 
 class A(DIV):
+
     tag = 'a'
+
     def xml(self):
-        if self['cid']:
-            self['_onclick']='web2py_component("%s","%s");return false;' % \
-                (self['_href'],self['cid'])
+        if self['delete']:
+            d = "jQuery(this).closest('%s').remove();" % self['delete']
+        else:
+            d = ''
+        if self['component']:
+            self['_onclick']="web2py_component('%s','%s');%sreturn false;" % \
+                (self['component'],self['target'] or '',d)
+            self['_href'] = self['_href'] or '#null'
+        elif self['callback']:
+            if d:
+                self['_onclick']="if(confirm(w2p_ajax_confirm_message||'Are you sure you want o delete this object?')){ajax('%s',[],'%s');%s};return false;" % (self['callback'],self['target'] or '',d)
+            else:
+                self['_onclick']="ajax('%s',[],'%s');%sreturn false;" % \
+                    (self['callback'],self['target'] or '',d)
+            self['_href'] = self['_href'] or '#null'
+        elif self['cid']:
+            self['_onclick']='web2py_component("%s","%s");%sreturn false;' % \
+                (self['_href'],self['cid'],d)
         return DIV.xml(self)
+
+
+class BUTTON(DIV):
+
+    tag = 'button'
+
 
 class EM(DIV):
 
@@ -1316,15 +1417,17 @@ class CODE(DIV):
         link = self['link']
         counter = self.attributes.get('counter', 1)
         highlight_line = self.attributes.get('highlight_line', None)
+        context_lines = self.attributes.get('context_lines', None) 
         styles = self['styles'] or {}
         return highlight(
-            ''.join(self.components),
+            join(self.components),
             language=language,
             link=link,
             counter=counter,
             styles=styles,
             attributes=self.attributes,
             highlight_line=highlight_line,
+            context_lines=context_lines,
             )
 
 
@@ -1406,6 +1509,16 @@ class TFOOT(DIV):
         self._wrap_components(TR, TR)
 
 
+class COL(DIV):
+
+    tag = 'col'
+
+
+class COLGROUP(DIV):
+
+    tag = 'colgroup'
+
+
 class TABLE(DIV):
     """
     TABLE Component.
@@ -1419,7 +1532,7 @@ class TABLE(DIV):
     tag = 'table'
 
     def _fixup(self):
-        self._wrap_components((TR, TBODY, THEAD, TFOOT), TR)
+        self._wrap_components((TR, TBODY, THEAD, TFOOT, COL, COLGROUP), TR)
 
 class I(DIV):
 
@@ -1491,7 +1604,7 @@ class INPUT(DIV):
                 requires = [requires]
             for validator in requires:
                 (value, errors) = validator(value)
-                if errors != None:
+                if not errors is None:
                     self.vars[name] = value
                     self.errors[name] = errors
                     break
@@ -1506,11 +1619,13 @@ class INPUT(DIV):
             t = self['_type'] = 'text'
         t = t.lower()
         value = self['value']
-        if self['_value'] == None:
+        if self['_value'] is None:
             _value = None
         else:
             _value = str(self['_value'])
-        if t == 'checkbox':
+        if '_checked' in self.attributes and not 'value' in self.attributes:
+            pass
+        elif t == 'checkbox':
             if not _value:
                 _value = self['_value'] = 'on'
             if not value:
@@ -1526,16 +1641,17 @@ class INPUT(DIV):
             else:
                 self['_checked'] = None
         elif t == 'text' or t == 'hidden':
-            if value != None:
-                self['_value'] = value
-            else:
+            if value is None:
                 self['value'] = _value
+            else:
+                self['_value'] = value
 
     def xml(self):
         name = self.attributes.get('_name', None)
         if name and hasattr(self, 'errors') \
                 and self.errors.get(name, None) \
                 and self['hideerror'] != True:
+            self['_class'] = (self['_class'] and self['_class']+' ' or '')+'invalidinput'
             return DIV.xml(self) + DIV(self.errors[name], _class='error',
                 errors=None, _id='%s__error' % name).xml()
         else:
@@ -1559,7 +1675,7 @@ class TEXTAREA(INPUT):
             self['_rows'] = 10
         if not '_cols' in self.attributes:
             self['_cols'] = 40
-        if self['value'] != None:
+        if not self['value'] is None:
             self.components = [self['value']]
         elif self.components:
             self['value'] = self.components[0]
@@ -1625,7 +1741,7 @@ class SELECT(INPUT):
         options = itertools.chain(*component_list)
 
         value = self['value']
-        if value != None:
+        if not value is None:
             if not self['_multiple']:
                 for c in options: # my patch
                     if value and str(c['_value'])==str(value):
@@ -1682,21 +1798,26 @@ class FORM(DIV):
         self.vars = Storage()
         self.errors = Storage()
         self.latest = Storage()
+        self.accepted = None # none for not submitted
 
     def accepts(
         self,
-        vars,
+        request_vars,
         session=None,
         formname='default',
         keepvalues=False,
         onvalidation=None,
         hideerror=False,
+        **kwargs
         ):
-        if vars.__class__.__name__ == 'Request':
-            vars=vars.post_vars
+        """
+        kwargs is not used but allows to specify the same interface for FROM and SQLFORM
+        """
+        if request_vars.__class__.__name__ == 'Request':
+            request_vars=request_vars.post_vars
         self.errors.clear()
         self.request_vars = Storage()
-        self.request_vars.update(vars)
+        self.request_vars.update(request_vars)
         self.session = session
         self.formname = formname
         self.keepvalues = keepvalues
@@ -1724,7 +1845,7 @@ class FORM(DIV):
                 onfailure = onvalidation.get('onfailure', None)
                 if onsuccess and status:
                     onsuccess(self)
-                if onfailure and vars and not status:
+                if onfailure and request_vars and not status:
                     onfailure(self)
                     status = len(self.errors) == 0
             elif status:
@@ -1734,7 +1855,7 @@ class FORM(DIV):
                     onvalidation(self)
         if self.errors:
             status = False
-        if session != None:
+        if not session is None:
             if hasattr(self,'record_hash'):
                 formkey = self.record_hash
             else:
@@ -1742,6 +1863,7 @@ class FORM(DIV):
             self.formkey = session['_formkey[%s]' % formname] = formkey
         if status and not keepvalues:
             self._traverse(False,hideerror)
+        self.accepted = status
         return status
 
     def _postprocessing(self):
@@ -1772,6 +1894,105 @@ class FORM(DIV):
         if hidden_fields.components:
             newform.append(hidden_fields)
         return DIV.xml(newform)
+
+    def validate(self,**kwargs):
+        """
+        This function validates the form,
+        you can use it instead of directly form.accepts.
+
+        Usage:
+        In controller
+
+        def action():
+            form=FORM(INPUT(_name=\"test\", requires=IS_NOT_EMPTY()))
+            form.validate() #you can pass some args here - see below
+            return dict(form=form)
+
+        This can receive a bunch of arguments
+
+        onsuccess = 'flash' - will show message_onsuccess in response.flash
+                    None - will do nothing
+                    can be a function (lambda form: pass)
+        onfailure = 'flash' - will show message_onfailure in response.flash
+                    None - will do nothing
+                    can be a function (lambda form: pass)
+        message_onsuccess
+        message_onfailure
+        next      = where to redirect in case of success
+        any other kwargs will be passed for form.accepts(...)
+        """
+        from gluon import current, redirect
+        kwargs['request_vars'] = kwargs.get('request_vars',current.request.post_vars)
+        kwargs['session'] = kwargs.get('session',current.session)
+        kwargs['dbio'] = kwargs.get('dbio',False) # necessary for SQLHTML forms
+
+        onsuccess = kwargs.get('onsuccess','flash')
+        onfailure = kwargs.get('onfailure','flash')
+        message_onsuccess = kwargs.get('message_onsuccess',
+                                       current.T("Success!"))
+        message_onfailure = kwargs.get('message_onfailure',
+                                       current.T("Errors in form, please check it out."))
+        next = kwargs.get('next',None)
+        for key in ('message_onsuccess','message_onfailure','onsuccess',
+                    'onfailure','next'):
+            if key in kwargs:
+                del kwargs[key]
+
+        if self.accepts(**kwargs):
+            if onsuccess == 'flash':
+                if next:
+                    current.session.flash = message_onsuccess
+                else:
+                    current.response.flash = message_onsuccess
+            elif callable(onsuccess):
+                onsuccess(self)
+            if next:
+                if self.vars:
+                    for key,value in self.vars.items():
+                        next = next.replace('[%s]' % key,
+                                            urllib.quote(str(value)))
+                    if not next.startswith('/'):
+                        next = URL(next)
+                redirect(next)
+            return True
+        elif self.errors:
+            if onfailure == 'flash':
+                current.response.flash = message_onfailure
+            elif callable(onfailure):
+                onfailure(self)
+            return False
+
+    def process(self, **kwargs):
+        """
+        Perform the .validate() method but returns the form
+
+        Usage in controllers:
+        # directly on return
+        def action():
+            #some code here
+            return dict(form=FORM(...).process(...))
+
+        You can use it with FORM, SQLFORM or FORM based plugins
+
+        Examples:
+        #response.flash messages
+        def action():
+            form = SQLFORM(db.table).process(message_onsuccess='Sucess!')
+            retutn dict(form=form)
+
+        # callback function
+        # callback receives True or False as first arg, and a list of args.
+        def my_callback(status, msg):
+           response.flash = "Success! "+msg if status else "Errors occured"
+
+        # after argument can be 'flash' to response.flash messages
+        # or a function name to use as callback or None to do nothing.
+        def action():
+            return dict(form=SQLFORM(db.table).process(onsuccess=my_callback)
+        """
+        kwargs['dbio'] = kwargs.get('dbio',True) # necessary for SQLHTML forms
+        self.validate(**kwargs)
+        return self
 
 
 class BEAUTIFY(DIV):
@@ -1827,7 +2048,7 @@ class BEAUTIFY(DIV):
                         value = c[key]
                         if type(value) == types.LambdaType:
                             continue
-                        rows.append(TR(TD(filtered_key, _style='font-weight:bold;'),
+                        rows.append(TR(TD(filtered_key, _style='font-weight:bold;vertical-align:top'),
                                        TD(':',_valign='top'),
                                        TD(BEAUTIFY(value, **attributes))))
                     components.append(TABLE(*rows, **attributes))
@@ -1876,6 +2097,8 @@ class MENU(DIV):
             self['li_class'] = 'web2py-menu-expand'
         if not 'li_active' in self.attributes:
             self['li_active'] = 'web2py-menu-active'
+        if not 'mobile' in self.attributes:
+            self['mobile'] = False
 
     def serialize(self, data, level=0):
         if level == 0:
@@ -1892,7 +2115,7 @@ class MENU(DIV):
                 li = LI(A(name, _href=link))
             else:
                 li = LI(A(name, _href='#',
-                          _onclick='javascript:void(0):return false'))
+                          _onclick='javascript:void(0);return false;'))
             if len(item) > 3 and item[3]:
                 li['_class'] = self['li_class']
                 li.append(self.serialize(item[3], level+1))
@@ -1901,11 +2124,26 @@ class MENU(DIV):
                     li['_class'] = li['_class']+' '+self['li_active']
                 else:
                     li['_class'] = self['li_active']
-            ul.append(li)
+            if len(item) <= 4 or item[4] == True:
+                ul.append(li)
         return ul
 
+    def serialize_mobile(self, data, select=None, prefix=''):
+        if not select:
+            select = SELECT()
+        for item in data:
+            if item[2]:
+                select.append(OPTION(CAT(prefix, item[0]), _value=item[2], _selected=item[1]))
+            if len(item)>3 and len(item[3]):
+                self.serialize_mobile(item[3], select, prefix = CAT(prefix, item[0], '/'))
+        select['_onchange'] = 'window.location=this.value'
+        return select
+
     def xml(self):
-        return self.serialize(self.data, 0).xml()
+        if self['mobile']:
+            return self.serialize_mobile(self.data, 0).xml()
+        else:
+            return self.serialize(self.data, 0).xml()
 
 
 def embed64(
@@ -2007,10 +2245,12 @@ class web2pyHTMLParser(HTMLParser):
         else:
             self.last = tag.tag[:-1]
     def handle_data(self,data):
-        try:
-            self.parent.append(data.encode('utf8','xmlcharref'))
-        except:
-            self.parent.append(data.decode('latin1').encode('utf8','xmlcharref'))
+        if not isinstance(data,unicode):
+            try:
+                data = data.decode('utf8')
+            except:
+                data = data.decode('latin1')
+        self.parent.append(data.encode('utf8','xmlcharref'))
     def handle_charref(self,name):
         if name[1].lower()=='x':
             self.parent.append(unichr(int(name[2:], 16)).encode('utf8'))
@@ -2030,7 +2270,8 @@ class web2pyHTMLParser(HTMLParser):
                 raise RuntimeError, "unable to balance tag %s" % tagname
             if parent_tagname[:len(tagname)]==tagname: break
 
-def markdown_serializer(text,tag=None,attr={}):
+def markdown_serializer(text,tag=None,attr=None):
+    attr = attr or {}
     if tag is None: return re.sub('\s+',' ',text)
     if tag=='br': return '\n\n'
     if tag=='h1': return '#'+text+'\n\n'
@@ -2045,8 +2286,9 @@ def markdown_serializer(text,tag=None,attr={}):
     if tag=='img': return '![%s](%s)' % (attr.get('_alt',''),attr.get('_src',''))
     return text
 
-def markmin_serializer(text,tag=None,attr={}):
-    if tag is None: return re.sub('\s+',' ',text)
+def markmin_serializer(text,tag=None,attr=None):
+    attr = attr or {}
+    # if tag is None: return re.sub('\s+',' ',text)
     if tag=='br': return '\n\n'
     if tag=='h1': return '# '+text+'\n\n'
     if tag=='h2': return '#'*2+' '+text+'\n\n'
@@ -2059,7 +2301,8 @@ def markmin_serializer(text,tag=None,attr={}):
     if tag in ['td','th']: return ' | '+text
     if tag in ['b','strong','label']: return '**%s**' % text
     if tag in ['em','i']: return "''%s''" % text
-    if tag in ['tt','code']: return '``%s``' % text
+    if tag in ['tt']: return '``%s``' % text.strip()
+    if tag in ['code']: return '``\n%s``' % text
     if tag=='a': return '[[%s %s]]' % (text,attr.get('_href',''))
     if tag=='img': return '[[%s %s left]]' % (attr.get('_alt','no title'),attr.get('_src',''))
     return text
@@ -2069,10 +2312,10 @@ class MARKMIN(XmlComponent):
     """
     For documentation: http://web2py.com/examples/static/markmin.html
     """
-    def __init__(self, text, extra={}, allowed={}, sep='p'):
+    def __init__(self, text, extra=None, allowed=None, sep='p'):
         self.text = text
-        self.extra = extra
-        self.allowed = allowed
+        self.extra = extra or {}
+        self.allowed = allowed or {}
         self.sep = sep
 
     def xml(self):
@@ -2101,3 +2344,7 @@ class MARKMIN(XmlComponent):
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+
+
+

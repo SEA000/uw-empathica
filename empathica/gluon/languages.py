@@ -38,10 +38,8 @@ regex_language = \
 
 
 def read_dict_aux(filename):
-    fp = open(filename, 'r')
-    portalocker.lock(fp, portalocker.LOCK_SH)
+    fp = portalocker.LockedFile(filename, 'r')
     lang_text = fp.read().replace('\r\n', '\n')
-    portalocker.unlock(fp)
     fp.close()
     if not lang_text.strip():
         return {}
@@ -51,7 +49,7 @@ def read_dict_aux(filename):
         logging.error('Syntax error in %s' % filename)
         return {}
 
-def read_dict(filename):
+def read_dict(filename):    
     return getcfs('language:%s'%filename,filename,
                   lambda filename=filename:read_dict_aux(filename))
 
@@ -91,16 +89,15 @@ def utf8_repr(s):
 
 def write_dict(filename, contents):
     try:
-        fp = open(filename, 'w')
-    except IOError:
-        logging.error('Unable to write to file %s' % filename)
+        fp = portalocker.LockedFile(filename, 'w')
+    except (IOError, OSError):
+        if not is_gae:
+            logging.warning('Unable to write to file %s' % filename)
         return
-    portalocker.lock(fp, portalocker.LOCK_EX)
     fp.write('# coding: utf8\n{\n')
     for key in sorted(contents):
         fp.write('%s: %s,\n' % (utf8_repr(key), utf8_repr(contents[key])))
     fp.write('}\n')
-    portalocker.unlock(fp)
     fp.close()
 
 
@@ -199,6 +196,7 @@ class translator(object):
     """
 
     def __init__(self, request):
+        self.request = request
         self.folder = request.folder
         self.current_languages = ['en']
         self.accepted_language = None
@@ -206,11 +204,12 @@ class translator(object):
         self.http_accept_language = request.env.http_accept_language
         self.requested_languages = self.force(self.http_accept_language)
         self.lazy = True
+        self.otherTs = {}
 
     def get_possible_languages(self):
-        possible_languages = self.current_languages
+        possible_languages = [lang for lang in self.current_languages]
         file_ending = re.compile("\.py$")
-        for langfile in os.listdir(self.folder+'languages/'):
+        for langfile in os.listdir(os.path.join(self.folder,'languages')):
             if file_ending.search(langfile):
                 possible_languages.append(file_ending.sub('',langfile))
         return possible_languages
@@ -222,7 +221,7 @@ class translator(object):
         self.force(self.http_accept_language)
 
     def force(self, *languages):
-        if not languages or languages[0] == None:
+        if not languages or languages[0] is None:
             languages = []
         if len(languages) == 1 and isinstance(languages[0], (str, unicode)):
             languages = languages[0]
@@ -248,11 +247,21 @@ class translator(object):
         self.t = {}  # ## no language by default
         return languages
 
-    def __call__(self, message, symbols={}):
-        if self.lazy:
-            return lazyT(message, symbols, self)
+    def __call__(self, message, symbols={}, language=None, lazy=None):
+        if lazy is None:
+            lazy = self.lazy
+        if not language:
+            if lazy:
+                return lazyT(message, symbols, self)
+            else:
+                return self.translate(message, symbols)
         else:
-            return self.translate(message, symbols)
+            try:
+                otherT = self.otherTs[language]
+            except KeyError:
+                otherT = self.otherTs[language] = translator(self.request)
+                otherT.force(language)
+            return otherT(message, symbols, lazy=lazy)
 
     def translate(self, message, symbols):
         """
@@ -267,6 +276,9 @@ class translator(object):
         the ## notation is ignored in multiline strings and strings that
         start with ##. this is to allow markmin syntax to be translated
         """
+        #for some reason languages.py gets executed before gaehandler.py
+        # is able to set web2py_runtime_gae, so re-check here
+        is_gae = settings.global_settings.web2py_runtime_gae
         if not message.startswith('#') and not '\n' in message:
             tokens = message.rsplit('##', 1)
         else:
@@ -276,7 +288,7 @@ class translator(object):
             tokens[0] = tokens[0].strip()
             message = tokens[0] + '##' + tokens[1].strip()
         mt = self.t.get(message, None)
-        if mt == None:
+        if mt is None:
             self.t[message] = mt = tokens[0]
             if self.language_file and not is_gae:
                 write_dict(self.language_file, self.t)
@@ -296,10 +308,8 @@ def findT(path, language='en-us'):
     vp = os.path.join(path, 'views')
     for file in listdir(mp, '.+\.py', 0) + listdir(cp, '.+\.py', 0)\
          + listdir(vp, '.+\.html', 0):
-        fp = open(file, 'r')
-        portalocker.lock(fp, portalocker.LOCK_SH)
+        fp = portalocker.LockedFile(file, 'r')
         data = fp.read()
-        portalocker.unlock(fp)
         fp.close()
         items = regex_translate.findall(data)
         for item in items:
@@ -334,4 +344,8 @@ def update_all_languages(application_path):
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+
+
+
 
