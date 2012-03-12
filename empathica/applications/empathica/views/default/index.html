@@ -22,12 +22,12 @@
     <div id="banner">
         <div class="wrapper">
             <div id="title"></div>            
+            {{ if 'error' not in request.vars:}}
             {{if need_to_update:}}
             <div align="center" style="margin-top:-10px;">
                 A new version of Empathica came out (your version = {{= empathica_version }}, current version = {{=version}}). Please, update.
             </div>
-            {{pass}}
-            {{ if 'error' not in request.vars:}}
+            {{pass}}            
             <div id="links" style="margin-top:20px;">
                 <button id="about" onclick='location.href="{{=URL('about')}}";'>Learn More</button>
                 {{if need_to_update:}}
