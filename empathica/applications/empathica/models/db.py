@@ -14,7 +14,7 @@ from datetime import datetime
 # TODO: Move this to some configuration file
 primary_support_email = "e_solodkin@hotmail.com"
 secondary_support_email = "pthagard@artsservices.uwaterloo.ca"
-empathica_version = 0.32
+empathica_version = 0.33
 update_donwload_url = "http://cogsci.uwaterloo.ca/Empathica/empathica.w2p"
 current_version_url = "http://cogsci.uwaterloo.ca/Empathica/empathica_version"
 
