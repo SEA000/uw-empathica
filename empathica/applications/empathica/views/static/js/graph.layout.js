@@ -70,6 +70,205 @@ Graph.prototype.circleLayout = function() {
     this.repaint();
 }
 
+/**
+    Performs a spring layout on the CAM.
+**/
+Graph.prototype.springLayout = function() {
+
+    // Hide the valence selector
+    this.hideValenceSelector();
+
+    // Define the algorithm's constants
+    var epsilon = 30;
+    var damping = 0.1;
+    var timestep = 0.05;
+    var repulsion_constant = -3E8; //-1E8;
+    var min_spring_length = 25;
+    var spring_constant = 100; //200;
+    var timeout = 50;
+    var node_count = 0;
+    var max_iter = 15000 / timeout; // max runtime 15 seconds
+    
+    // For undo
+    var oldValues = { 'nodes': {}, 'edges': {} };
+    var newValues = { 'nodes': {}, 'edges': {} };
+    
+    // Set up initial node velocities    
+    var anchor = '';
+    for (var nid in g.nodes) {
+        if (node_count == 0) {
+            anchor = nid;
+        }
+        
+        var node = g.nodes[nid];        
+        node.velocity = [0, 0];
+        node_count += 1;
+        
+        oldValues['nodes'][nid] = jQuery.extend(true, {}, node.dim);
+    }
+    epsilon *= node_count;
+    
+    // Delete all edge inner points
+    var edge_stats = {};
+    for (var eid in g.edges) {
+        var edge = g.edges[eid];
+        console.log(edge.from);
+        console.log(edge.to);
+        
+        // Track the incoming and outgoing edges
+        if (!(edge.to in edge_stats)) {
+            edge_stats[edge.to] = 0;
+        }
+        
+        if (!(edge.from in edge_stats)) {
+            edge_stats[edge.from] = 0;
+        }
+        
+        edge_stats[edge.to] += 1;
+        edge_stats[edge.from] += 1;
+        
+        if (edge.innerPoints && edge.innerPoints.length > 0) {
+            oldValues['edges'][eid] = [];
+            newValues['edges'][eid] = [];
+            
+            // Save old points
+            for (var i = 0; i < edge.innerPoints.length; i += 1) {
+                var point = edge.innerPoints[i];
+                oldValues['edges'][eid].push(new Point(point.x, point.y));
+            }
+            
+            // Reset inner points
+            edge.innerPoints = [];
+        }
+    }
+    
+    // Compute the anchor node 
+    var max = 0;
+    for (var nid in edge_stats) {
+        if (edge_stats[nid] > max) {
+            anchor = nid;
+            max = edge_stats[nid];
+        }
+    }
+    
+    // Indicate that layout is in progress
+    g.layoutInProgress = true;
+ 
+    //set up initial node positions randomly // make sure no 2 nodes are in exactly the same position        
+    var counter = 0;
+    var func = function() {            
+        var total_kinetic_energy = 0; // running sum of total kinetic energy over all particles
+        for (var nid in g.nodes) {
+            if (nid == anchor) {
+                continue;
+            }
+        
+            var this_node = g.nodes[nid];
+            var net_force = [0, 0]; // running sum of total force on this particular node            
+            
+            // Compute repulsion between nodes based on Coloumb's law
+            for (var nid_oither in g.nodes) {
+                if (nid != nid_oither) {
+                    var other_node = g.nodes[nid_oither];
+                    
+                    var diff_x = other_node.dim.x - this_node.dim.x + 0.01; // Make sure it is not zero
+                    var diff_y = this_node.dim.y - other_node.dim.y;
+                    var theta = Math.atan(diff_y/diff_x);
+                    if (diff_x < 0) {
+                        theta += Math.PI;
+                    }
+                    
+                    var distance_squared = Math.pow(Math.max(Math.abs(diff_x) - (this_node.dim.width / 2 + other_node.dim.width / 2), 10), 2) + Math.pow(Math.max(Math.abs(diff_y) - (this_node.dim.height / 2 + other_node.dim.height / 2), 10), 2);
+                    var charge = 1; //this_node.valence * other_node.valence;
+                    var force = repulsion_constant * charge / distance_squared;
+                    
+                    net_force[0] += force * Math.cos(theta);
+                    net_force[1] -= force * Math.sin(theta);
+                }
+            }       
+            
+            // Calculate the attractions based on Hooke's law
+            for (var eid in g.edges) {
+                var edge = g.edges[eid];
+                var from, to;
+                if (edge.from == nid) {
+                    from = g.nodes[edge.from];
+                    to = g.nodes[edge.to];
+                } else if (edge.to == nid) {
+                    from = g.nodes[edge.to];
+                    to = g.nodes[edge.from];
+                } else {
+                    continue;
+                }
+                
+                var diff_x = to.dim.x - from.dim.x + 0.01; // Make sure it is not zero
+                var diff_y = from.dim.y - to.dim.y;
+                var theta = Math.atan(diff_y/diff_x);
+                if (diff_x < 0) {
+                    theta += Math.PI;
+                }
+                
+                var multiplier = 3 * Math.abs(edge.valence) + 1;
+                
+                // Compute the total displacement
+                var total_length = Math.sqrt(Math.pow(Math.abs(diff_x) - (this_node.dim.width / 2 + other_node.dim.width / 2), 2) + Math.pow(Math.abs(diff_y) - (this_node.dim.height / 2 + other_node.dim.height / 2), 2));
+                var displacement = total_length - min_spring_length;             
+                
+                net_force[0] += spring_constant * multiplier * displacement * Math.cos(theta);
+                net_force[1] -= spring_constant * multiplier  * displacement * Math.sin(theta);     
+            }            
+            
+            // without damping, it moves forever 
+            this_node.velocity[0] = (this_node.velocity[0] + timestep * net_force[0]) * damping;
+            this_node.velocity[1] = (this_node.velocity[1] + timestep * net_force[1]) * damping;            
+            
+            // assume all nodes have mass 1
+            total_kinetic_energy += Math.pow(this_node.velocity[0], 2) + Math.pow(this_node.velocity[1], 2);
+        }
+        
+        // Apply position changes
+        for (var nid in g.nodes) {
+            if (nid == anchor) {
+                continue;
+            }
+        
+            var this_node = g.nodes[nid];
+            this_node.dim.x += timestep * this_node.velocity[0]
+            this_node.dim.y += timestep * this_node.velocity[1];
+        }
+        
+        g.repaint();
+        
+        if (total_kinetic_energy > epsilon && counter < max_iter) {
+            counter += 1;
+            setTimeout(func, timeout);
+        } else {
+            // Remove temp variables and remember changes
+            for (var nid in g.nodes) { 
+                var node = g.nodes[nid];                
+                delete node.velocity;
+                newValues['nodes'][nid] = jQuery.extend(true, {}, node.dim);
+            }
+            
+            // Save the origin position
+            oldValues['origin'] = { 'x' : g.originX, 'y' : g.originY };
+            newValues['origin'] = { 'x' : g.originX, 'y' : g.originY };
+            
+            // Push the changes to undo
+            g.pushToUndo(g.cmdNode, guid(), g.cmdLayout, oldValues, newValues);
+            
+            // Indicate that layout is no longer in progress
+            delete g.layoutInProgress;
+            
+            // Show the valence selector if appropriate
+            g.showValenceSelector();
+            g.repaint();
+        }
+    };
+        
+    setTimeout(func, timeout);
+}
+
 /** 
     Computes the theoretical centre of the CAM.
 **/

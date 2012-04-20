@@ -139,6 +139,13 @@ Graph.prototype.initEventListeners = function() {
         g.moveOrigin(g.moveOffset, 0);
     }, defaultOptions);
     
+    // Layout shortcut
+    shortcut.add("Ctrl+L", function() { 
+        if (!g.layoutInProgress) {
+            g.springLayout();
+        }
+    }, defaultOptions);
+    
     // Disable the context menu
     document.oncontextmenu = function() {
         return false;

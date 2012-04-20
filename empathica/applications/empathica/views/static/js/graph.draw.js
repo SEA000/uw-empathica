@@ -373,14 +373,27 @@ Graph.prototype.createImage = function(thumb) {
 }
 
 /**
+    Find the bounding box for a given node.
+**/
+Graph.prototype.getBoundingBox = function(node) {
+    var bounds = {};
+    var dim = node.dim;
+    bounds.left = dim.x - dim.width/2;
+    bounds.top = dim.y - dim.height/2;
+    bounds.right = dim.x + dim.width/2;
+    bounds.bottom = dim.y + dim.height/2;
+    return bounds;
+}
+
+/**
     Find the bounding box fitting all the shapes in the Graph
 **/
 Graph.prototype.getBounds = function() {
-    var bounds = {};
     var nodeCount = 0;
     var first = "";
     for (var i in this.nodes) { nodeCount++; first = i;}
     if (nodeCount == 0) {
+        var bounds = {};
         bounds.left = 0;
         bounds.top = 0;
         bounds.right = 100;
@@ -388,25 +401,20 @@ Graph.prototype.getBounds = function() {
         return bounds;
     }
     
-    var dim = this.nodes[first].dim;
-    bounds.left = dim.x - dim.width/2;
-    bounds.top = dim.y - dim.height/2;
-    bounds.right = dim.x + dim.width/2;
-    bounds.bottom = dim.y + dim.height/2;
-    
+    var bounds = this.getBoundingBox(this.nodes[first]);
     for (var i in this.nodes) {
-        var n = this.nodes[i];
-        if (n.dim.x - n.dim.width/2 < bounds.left) {
-            bounds.left = n.dim.x - n.dim.width/2;
+        var node_bounds = this.getBoundingBox(this.nodes[i]);
+        if (node_bounds.left < bounds.left) {
+            bounds.left = node_bounds.left;
         }
-        if (n.dim.x + n.dim.width/2 > bounds.right) {
-            bounds.right = n.dim.x + n.dim.width/2;
+        if (node_bounds.right > bounds.right) {
+            bounds.right = node_bounds.right;
         }
-        if (n.dim.y - n.dim.height/2 < bounds.top) {
-            bounds.top = n.dim.y - n.dim.height/2;
+        if (node_bounds.top < bounds.top) {
+            bounds.top = node_bounds.top;
         }
-        if (n.dim.y + n.dim.height/2 > bounds.bottom) {
-            bounds.bottom = n.dim.y + n.dim.height/2;
+        if (node_bounds.bottom > bounds.bottom) {
+            bounds.bottom = node_bounds.bottom;
         }
     }
     

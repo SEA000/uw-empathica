@@ -1042,6 +1042,12 @@ Graph.prototype.deNormalize = function(val) {
 Graph.prototype.showValenceSelector = function(obj, mx, my) {
     this.valenceSlider.css('position', 'absolute');
     
+    // If layout is in progress, do not show valence selector
+    if (this.layoutInProgress) {
+        this.hideValenceSelector();
+        return;
+    }
+    
     // If the object is not initialized, attempt to show the slider at currently selected object
     if (obj === undefined) {
         if (this.selectedObject instanceof Node || this.selectedObject instanceof Edge) {
